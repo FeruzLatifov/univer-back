@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+bases:
+  - ../../base
+
+namespace: univer-prod
+
+replicas:
+  - name: univer-backend
+    count: 5
+
+images:
+  - name: univer-backend
+    newName: registry.example.com/univer-backend
+    newTag: v1.0.0
+
+patchesStrategicMerge:
+  - deployment-patch.yaml
+
+configMapGenerator:
+  - name: backend-config
+    behavior: merge
+    literals:
+      - APP_ENV=production
+      - APP_DEBUG=false

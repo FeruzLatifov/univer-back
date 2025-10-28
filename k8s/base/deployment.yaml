@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: univer-backend
+  labels:
+    app: univer-backend
+    tier: backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: univer-backend
+  template:
+    metadata:
+      labels:
+        app: univer-backend
+        tier: backend
+    spec:
+      containers:
+      - name: backend
+        image: univer-backend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
+          name: http
+        env:
+        - name: APP_ENV
+          value: "production"
+        - name: APP_DEBUG
+          value: "false"
+        - name: DB_HOST
+          value: "postgres-service"
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: database
+        - name: DB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: password
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: jwt-secret
+              key: secret
+        - name: REDIS_HOST
+          value: "redis-service"
+
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 80
+          initialDelaySeconds: 40
+          periodSeconds: 30
+
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 80
+          initialDelaySeconds: 20
+          periodSeconds: 10
+
+        volumeMounts:
+        - name: storage
+          mountPath: /var/www/html/storage
+
+      volumes:
+      - name: storage
+        persistentVolumeClaim:
+          claimName: backend-storage-pvc
