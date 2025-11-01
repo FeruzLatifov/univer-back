@@ -19,6 +19,22 @@ Route::middleware('throttle:public')->group(function () {
             'database' => DB::connection()->getPdo() ? 'connected' : 'disconnected'
         ]);
     });
+
+    // System configuration for login page
+    Route::get('/system/login-config', [\App\Http\Controllers\Api\V1\SystemController::class, 'getLoginConfig']);
+
+    // Translations
+    Route::get('/system/translations/{language?}', [\App\Http\Controllers\Api\V1\SystemController::class, 'getTranslations']);
+    Route::get('/system/languages', [\App\Http\Controllers\Api\V1\SystemController::class, 'getLanguages']);
+
+    // Language management (public - no auth required)
+    Route::prefix('v1')->group(function () {
+        Route::get('/languages', [\App\Http\Controllers\Api\V1\LanguageController::class, 'index']);
+        Route::get('/languages/current', [\App\Http\Controllers\Api\V1\LanguageController::class, 'current']);
+        Route::get('/languages/translations', [\App\Http\Controllers\Api\V1\LanguageController::class, 'getTranslations']);
+        Route::get('/languages/{code}', [\App\Http\Controllers\Api\V1\LanguageController::class, 'show']);
+        Route::post('/languages/set', [\App\Http\Controllers\Api\V1\LanguageController::class, 'setLanguage']);
+    });
 });
 
 /*
@@ -34,13 +50,19 @@ Route::middleware('throttle:public')->group(function () {
 
 // Student Auth (5 req/min)
 Route::middleware('throttle:auth')->prefix('student/auth')->group(function () {
-    Route::post('/login', [\App\Http\Controllers\Api\StudentAuthController::class, 'login']);
+    Route::post('/login', [\App\Http\Controllers\Api\V1\Student\AuthController::class, 'login']);
 
     Route::middleware('auth:student-api')->group(function () {
-        Route::post('/logout', [\App\Http\Controllers\Api\StudentAuthController::class, 'logout']);
-        Route::post('/refresh', [\App\Http\Controllers\Api\StudentAuthController::class, 'refresh']);
-        Route::get('/me', [\App\Http\Controllers\Api\StudentAuthController::class, 'me']);
+        Route::post('/logout', [\App\Http\Controllers\Api\V1\Student\AuthController::class, 'logout']);
+        Route::post('/refresh', [\App\Http\Controllers\Api\V1\Student\AuthController::class, 'refresh']);
+        Route::get('/me', [\App\Http\Controllers\Api\V1\Student\AuthController::class, 'me']);
     });
+});
+
+// Student Password Reset (3 req/5min)
+Route::middleware('throttle:password')->prefix('student/auth')->group(function () {
+    Route::post('/forgot-password', [\App\Http\Controllers\Api\V1\Student\AuthController::class, 'forgotPassword']);
+    Route::post('/reset-password', [\App\Http\Controllers\Api\V1\Student\AuthController::class, 'resetPassword']);
 });
 
 // Student Portal Routes
@@ -72,13 +94,19 @@ Route::middleware(['auth:student-api', 'throttle:api'])->prefix('student')->grou
 
 // Admin/Employee Auth (5 req/min)
 Route::middleware('throttle:auth')->prefix('admin/auth')->group(function () {
-    Route::post('/login', [\App\Http\Controllers\Api\AdminAuthController::class, 'login']);
+    Route::post('/login', [\App\Http\Controllers\Api\V1\Staff\AuthController::class, 'login']);
 
     Route::middleware('auth:admin-api')->group(function () {
-        Route::post('/logout', [\App\Http\Controllers\Api\AdminAuthController::class, 'logout']);
-        Route::post('/refresh', [\App\Http\Controllers\Api\AdminAuthController::class, 'refresh']);
-        Route::get('/me', [\App\Http\Controllers\Api\AdminAuthController::class, 'me']);
+        Route::post('/logout', [\App\Http\Controllers\Api\V1\Staff\AuthController::class, 'logout']);
+        Route::post('/refresh', [\App\Http\Controllers\Api\V1\Staff\AuthController::class, 'refresh']);
+        Route::get('/me', [\App\Http\Controllers\Api\V1\Staff\AuthController::class, 'me']);
     });
+});
+
+// Admin/Staff Password Reset (3 req/5min)
+Route::middleware('throttle:password')->prefix('admin/auth')->group(function () {
+    Route::post('/forgot-password', [\App\Http\Controllers\Api\V1\Staff\AuthController::class, 'forgotPassword']);
+    Route::post('/reset-password', [\App\Http\Controllers\Api\V1\Staff\AuthController::class, 'resetPassword']);
 });
 
 /*
@@ -287,12 +315,12 @@ Route::prefix('v1')->group(function () {
     |--------------------------------------------------------------------------
     */
     Route::middleware('throttle:auth')->prefix('auth')->group(function () {
-        Route::post('/student-login', [\App\Http\Controllers\Api\StudentAuthController::class, 'login']);
+        Route::post('/student-login', [\App\Http\Controllers\Api\V1\Student\AuthController::class, 'login']);
 
         Route::middleware('auth:student-api')->group(function () {
-            Route::post('/student-logout', [\App\Http\Controllers\Api\StudentAuthController::class, 'logout']);
-            Route::get('/student-profile', [\App\Http\Controllers\Api\StudentAuthController::class, 'me']);
-            Route::post('/student-refresh', [\App\Http\Controllers\Api\StudentAuthController::class, 'refresh']);
+            Route::post('/student-logout', [\App\Http\Controllers\Api\V1\Student\AuthController::class, 'logout']);
+            Route::get('/student-profile', [\App\Http\Controllers\Api\V1\Student\AuthController::class, 'me']);
+            Route::post('/student-refresh', [\App\Http\Controllers\Api\V1\Student\AuthController::class, 'refresh']);
         });
     });
 

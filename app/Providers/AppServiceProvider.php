@@ -22,7 +22,8 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         // Register TranslationServiceProvider for database-driven translations
-        $this->app->register(TranslationServiceProvider::class);
+        // Temporarily disabled due to addMissingCallback() not existing in Laravel 11
+        // $this->app->register(TranslationServiceProvider::class);
     }
 
     /**
@@ -72,14 +73,32 @@ class AppServiceProvider extends ServiceProvider
                 });
         });
 
-        // Auth endpoints - more restrictive (5 login attempts per minute)
+        // Auth endpoints - env-driven rate limiting
         RateLimiter::for('auth', function (Request $request) {
-            return Limit::perMinute(5)->by($request->ip())
+            $maxAttempts = (int) env('THROTTLE_AUTH_MAX_ATTEMPTS', 5);
+            $decayMinutes = (int) env('THROTTLE_AUTH_DECAY_MINUTES', 1);
+
+            return Limit::perMinutes($decayMinutes, $maxAttempts)->by($request->ip())
                 ->response(function (Request $request, array $headers) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'Too many login attempts. Please try again in ' . ($headers['Retry-After'] ?? 60) . ' seconds.',
+                        'message' => 'Juda ko\'p urinish amalga oshirildi. Iltimos ' . ($headers['Retry-After'] ?? 60) . ' soniyadan keyin qaytadan urinib ko\'ring.',
                         'retry_after' => $headers['Retry-After'] ?? 60,
+                    ], 429);
+                });
+        });
+
+        // Password reset endpoints - more restrictive
+        RateLimiter::for('password', function (Request $request) {
+            $maxAttempts = (int) env('THROTTLE_PASSWORD_MAX_ATTEMPTS', 3);
+            $decayMinutes = (int) env('THROTTLE_PASSWORD_DECAY_MINUTES', 5);
+
+            return Limit::perMinutes($decayMinutes, $maxAttempts)->by($request->ip())
+                ->response(function (Request $request, array $headers) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Juda ko\'p parol qayta tiklash urinishi. Iltimos ' . ($headers['Retry-After'] ?? 300) . ' soniyadan keyin qaytadan urinib ko\'ring.',
+                        'retry_after' => $headers['Retry-After'] ?? 300,
                     ], 429);
                 });
         });

@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
-use Illuminate\Http\Controller;
+use App\Http\Controllers\Controller;
 
 /**
  * @OA\OpenApi(
@@ -121,12 +121,14 @@ Telegram: @univer_support
  *         url=L5_SWAGGER_CONST_HOST,
  *         description="API Server"
  *     ),
- *     @OA\SecurityScheme(
- *         securityScheme="bearerAuth",
- *         type="http",
- *         scheme="bearer",
- *         bearerFormat="JWT",
- *         description="JWT token ni kiriting (login API dan olinadi)"
+ *     @OA\Components(
+ *         @OA\SecurityScheme(
+ *             securityScheme="bearerAuth",
+ *             type="http",
+ *             scheme="bearer",
+ *             bearerFormat="JWT",
+ *             description="JWT token ni kiriting (login API dan olinadi)"
+ *         )
  *     ),
  *     @OA\Tag(
  *         name="Student - Auth",

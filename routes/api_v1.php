@@ -60,10 +60,19 @@ Route::prefix('staff')->group(function () {
     Route::prefix('auth')->middleware('throttle:auth')->group(function () {
         Route::post('/login', [StaffAuthController::class, 'login']);
 
+        // Password reset (staff)
+        Route::post('/forgot-password', [StaffAuthController::class, 'forgotPassword'])->middleware('throttle:password');
+        Route::post('/reset-password', [StaffAuthController::class, 'resetPassword'])->middleware('throttle:password');
+
+        // Optional 2FA endpoints (enabled via env)
+        Route::post('/2fa/challenge', [StaffAuthController::class, 'twoFAChallenge']);
+        Route::post('/2fa/verify', [StaffAuthController::class, 'twoFAVerify']);
+
         Route::middleware('auth:staff-api')->group(function () {
             Route::post('/logout', [StaffAuthController::class, 'logout']);
             Route::post('/refresh', [StaffAuthController::class, 'refresh']);
             Route::get('/me', [StaffAuthController::class, 'me']);
+            Route::post('/role/switch', [StaffAuthController::class, 'switchRole']);
         });
     });
 
@@ -82,6 +91,14 @@ Route::prefix('student')->group(function () {
     // Auth
     Route::prefix('auth')->middleware('throttle:auth')->group(function () {
         Route::post('/login', [StudentAuthController::class, 'login']);
+
+        // Password reset (student)
+        Route::post('/forgot-password', [StudentAuthController::class, 'forgotPassword'])->middleware('throttle:password');
+        Route::post('/reset-password', [StudentAuthController::class, 'resetPassword'])->middleware('throttle:password');
+
+        // Optional 2FA endpoints (enabled via env)
+        Route::post('/2fa/challenge', [StudentAuthController::class, 'twoFAChallenge']);
+        Route::post('/2fa/verify', [StudentAuthController::class, 'twoFAVerify']);
 
         Route::middleware('auth:student-api')->group(function () {
             Route::post('/logout', [StudentAuthController::class, 'logout']);

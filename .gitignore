@@ -1,16 +1,93 @@
+# Laravel .gitignore - Best Practice
+
+# Environment files
+.env
+.env.backup
+.env.production
+.env.local
+.env.*.local
+
+# IDE & Editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Laravel specific
 /node_modules
 /public/hot
 /public/storage
 /storage/*.key
-/vendor
-.env
-.env.backup
-.phpunit.result.cache
-docker-compose.override.yml
-Homestead.json
-Homestead.yaml
+/storage/app/*
+!/storage/app/.gitkeep
+!/storage/app/public
+/storage/framework/cache/*
+!/storage/framework/cache/.gitkeep
+/storage/framework/sessions/*
+!/storage/framework/sessions/.gitkeep
+/storage/framework/views/*
+!/storage/framework/views/.gitkeep
+/storage/logs/*
+!/storage/logs/.gitkeep
+
+# Composer
+/vendor/
+composer.phar
+composer.lock
+
+# NPM / Yarn
 npm-debug.log
 yarn-error.log
-/.idea
-/.vscode
 
+# PHP
+*.log
+php_errors.log
+
+# Laravel Mix / Vite
+/public/build
+/public/css
+/public/js
+/public/mix-manifest.json
+
+# Testing
+/.phpunit.cache
+/phpunit.xml
+/.phpunit.result.cache
+/coverage
+/tests/_output/*
+
+# Deployment & Build
+/bootstrap/cache/*
+!/bootstrap/cache/.gitkeep
+/public_html
+
+# Authentication
+auth.json
+
+# Database
+*.sqlite
+*.sqlite-journal
+database.sqlite
+
+# Backup files
+*.backup
+*.bak
+*.old
+
+# Sentry
+.sentryclirc
+
+# Cache
+.php-cs-fixer.cache
+.php_cs.cache
+
+# Laravel Sail
+docker-compose.override.yml
+
+# Octane
+rr
+pgsql
+.rr.yaml

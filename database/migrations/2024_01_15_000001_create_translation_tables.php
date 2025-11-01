@@ -20,10 +20,11 @@ return new class extends Migration
         // Asl matnlar jadvali
         Schema::create('e_system_message', function (Blueprint $table) {
             $table->id();
-            $table->string('category', 32)->nullable()->index();
-            $table->text('message')->notNullable();
-
-            $table->unique(['category', 'message'], 'unique_message');
+            $table->string('code', 100)->unique()->comment('Unique code for the message (e.g., auth.login, common.save)');
+            $table->string('category', 32)->nullable()->index()->comment('Category for grouping (e.g., auth, common, errors)');
+            $table->text('message')->notNullable()->comment('Default message text');
+            $table->boolean('active')->default(true)->comment('Is message active');
+            $table->timestamps();
         });
 
         // Tarjimalar jadvali

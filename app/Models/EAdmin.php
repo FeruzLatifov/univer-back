@@ -21,10 +21,8 @@ class EAdmin extends Authenticatable implements JWTSubject
         'password',
         'full_name',
         '_employee',
-        '_structure',
         '_role',
         'status',
-        'active',
     ];
 
     protected $hidden = [
@@ -33,7 +31,6 @@ class EAdmin extends Authenticatable implements JWTSubject
     ];
 
     protected $casts = [
-        'active' => 'boolean',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
@@ -60,11 +57,21 @@ class EAdmin extends Authenticatable implements JWTSubject
 
     public function role()
     {
-        return $this->belongsTo(EAdminRole::class, '_role', 'code');
+        return $this->belongsTo(EAdminRole::class, '_role', 'id');
     }
 
     public function structure()
     {
         return $this->belongsTo(EStructure::class, '_structure', 'id');
+    }
+
+    public function roles()
+    {
+        return $this->belongsToMany(
+            EAdminRole::class,
+            'e_admin_roles',
+            '_admin',
+            '_role'
+        );
     }
 }

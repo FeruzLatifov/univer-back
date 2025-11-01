@@ -37,6 +37,8 @@ return [
         'Content-Type',
         'X-Requested-With',
         'X-CSRF-Token',
+        'X-Locale',
+        'X-Language',
     ],
 
     'exposed_headers' => [

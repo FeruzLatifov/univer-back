@@ -30,6 +30,12 @@ return [
             'provider' => 'admins',
         ],
 
+        // Staff guard (alias of admin-api)
+        'staff-api' => [
+            'driver' => 'jwt',
+            'provider' => 'admins',
+        ],
+
         // Student guard
         'student-api' => [
             'driver' => 'jwt',

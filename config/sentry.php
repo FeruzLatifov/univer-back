@@ -131,18 +131,11 @@ return [
     |
     | Configure Sentry integrations. These provide additional context and
     | functionality to Sentry error reporting.
+    | Note: Integration configuration moved to ignore_exceptions option
     |
     */
 
-    'integrations' => [
-        // Integration to capture unhandled promise rejections
-        Sentry\Integration\IgnoreErrorsIntegration::class => [
-            'ignore_exceptions' => [
-                // Add exception classes to ignore here
-                // Example: Symfony\Component\HttpKernel\Exception\NotFoundHttpException::class,
-            ],
-        ],
-    ],
+    // 'integrations' => [],  // Commented: Use default integrations
 
     /*
     |--------------------------------------------------------------------------
@@ -176,7 +169,7 @@ return [
     |
     */
 
-    'before_send_transaction' => null,
+    // 'before_send_transaction' => null,  // Commented: Sentry v4 requires callable or omit
 
     /*
     |--------------------------------------------------------------------------
@@ -231,17 +224,9 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Ignored HTTP Status Codes
+    | Note: ignore_http_codes removed (deprecated in Sentry v4)
+    | Use before_send callback above to filter by HTTP status
     |--------------------------------------------------------------------------
-    |
-    | List of HTTP status codes that should not trigger error reporting.
-    |
     */
-
-    'ignore_http_codes' => [
-        404, // Not Found
-        // 401, // Unauthorized
-        // 403, // Forbidden
-    ],
 
 ];
