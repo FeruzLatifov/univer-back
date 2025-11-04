@@ -1,7 +1,8 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Api\V1\Staff\AuthController as StaffAuthController;
+use Illuminate\Http\Request;
+use App\Http\Controllers\Api\V1\Employee\AuthController as EmployeeAuthController;
 use App\Http\Controllers\Api\V1\Student\AuthController as StudentAuthController;
 use App\Http\Controllers\Api\V1\Student\DocumentController;
 use App\Http\Controllers\Api\V1\Admin\StudentController as AdminStudentController;
@@ -22,6 +23,7 @@ use App\Http\Controllers\Api\V1\Teacher\AssignmentController as TeacherAssignmen
 use App\Http\Controllers\Api\V1\Teacher\TestController as TeacherTestController;
 use App\Http\Controllers\Api\V1\LanguageController;
 use App\Http\Controllers\Api\Admin\TranslationController;
+use App\Http\Controllers\Api\V1\Employee\DocumentController as EmployeeDocumentController;
 
 /*
 |--------------------------------------------------------------------------
@@ -52,36 +54,67 @@ Route::prefix('languages')->group(function () {
     Route::post('/set', [LanguageController::class, 'setLanguage']);
 });
 
-// ==========================================
-// STAFF (Xodimlar) - Authentication & Self Service
-// ==========================================
-Route::prefix('staff')->group(function () {
+
+// New preferred prefix: employee (aliases to the same controllers/guards)
+Route::prefix('employee')->group(function () {
     // Auth
     Route::prefix('auth')->middleware('throttle:auth')->group(function () {
-        Route::post('/login', [StaffAuthController::class, 'login']);
+        Route::post('/login', [EmployeeAuthController::class, 'login']);
+        Route::post('/forgot-password', [EmployeeAuthController::class, 'forgotPassword'])->middleware('throttle:password');
+        Route::post('/reset-password', [EmployeeAuthController::class, 'resetPassword'])->middleware('throttle:password');
 
-        // Password reset (staff)
-        Route::post('/forgot-password', [StaffAuthController::class, 'forgotPassword'])->middleware('throttle:password');
-        Route::post('/reset-password', [StaffAuthController::class, 'resetPassword'])->middleware('throttle:password');
-
-        // Optional 2FA endpoints (enabled via env)
-        Route::post('/2fa/challenge', [StaffAuthController::class, 'twoFAChallenge']);
-        Route::post('/2fa/verify', [StaffAuthController::class, 'twoFAVerify']);
-
-        Route::middleware('auth:staff-api')->group(function () {
-            Route::post('/logout', [StaffAuthController::class, 'logout']);
-            Route::post('/refresh', [StaffAuthController::class, 'refresh']);
-            Route::get('/me', [StaffAuthController::class, 'me']);
-            Route::post('/role/switch', [StaffAuthController::class, 'switchRole']);
+        Route::middleware('auth:employee-api')->group(function () {
+            Route::post('/logout', [EmployeeAuthController::class, 'logout']);
+            Route::post('/refresh', [EmployeeAuthController::class, 'refresh']);
+            Route::get('/me', [EmployeeAuthController::class, 'me']);
+            Route::post('/role/switch', [EmployeeAuthController::class, 'switchRole']);
         });
     });
 
-    // Protected Staff Routes (Self-Service Portal)
-    Route::middleware('auth:staff-api')->group(function () {
+    // Protected Employee Routes (Self-Service Portal)
+    Route::middleware('auth:employee-api')->group(function () {
         Route::get('/profile', [AdminStaffController::class, 'myProfile']);
         Route::put('/profile', [AdminStaffController::class, 'updateProfile']);
         Route::post('/profile/avatar', [AdminStaffController::class, 'uploadAvatar']);
+
+        // Teacher Load
+        Route::prefix('teacher-load')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\V1\Employee\TeacherLoadController::class, 'index']);
+            Route::get('/{id}', [\App\Http\Controllers\Api\V1\Employee\TeacherLoadController::class, 'show']);
+            Route::get('/{id}/download', [\App\Http\Controllers\Api\V1\Employee\TeacherLoadController::class, 'download']);
+        });
+
+        // E-Documents (Sign Documents)
+        Route::prefix('documents')->group(function () {
+            Route::get('/sign', [EmployeeDocumentController::class, 'index']);
+            Route::get('/{hash}/view', [EmployeeDocumentController::class, 'view']);
+            Route::post('/{hash}/sign', [EmployeeDocumentController::class, 'sign']);
+            Route::post('/{hash}/status', [EmployeeDocumentController::class, 'status']);
+        });
     });
+});
+
+// ==========================================
+// USER PERMISSIONS (for background refresh in frontend)
+// ==========================================
+Route::middleware(['auth:employee-api,admin-api,student-api'])->get('/user/permissions', function (Request $request) {
+    $user = auth('employee-api')->user() ?? auth('admin-api')->user() ?? auth('student-api')->user();
+
+    // Default empty permissions
+    $permissions = [];
+
+    if ($user && method_exists($user, 'getAllPermissions')) {
+        try {
+            $permissions = $user->getAllPermissions();
+        } catch (\Throwable $e) {
+            // Fail silently; frontend handles empty array
+            logger()->warning('user/permissions failed', ['error' => $e->getMessage()]);
+        }
+    }
+
+    return response()->json([
+        'permissions' => $permissions,
+    ]);
 });
 
 // ==========================================
@@ -137,7 +170,7 @@ Route::prefix('student')->group(function () {
 // ==========================================
 // TEACHER (O'qituvchilar) - Teaching Portal
 // ==========================================
-Route::prefix('teacher')->middleware('auth:staff-api')->group(function () {
+Route::prefix('teacher')->middleware('auth:employee-api')->group(function () {
 
     // Subjects & Teaching Load
     Route::get('/subjects', [TeacherSubjectController::class, 'index']);
@@ -235,9 +268,24 @@ Route::prefix('teacher')->middleware('auth:staff-api')->group(function () {
 });
 
 // ==========================================
+// MENU & PERMISSIONS API
+// ==========================================
+use App\Http\Controllers\Api\V1\Employee\MenuController;
+
+// Removed legacy /staff/* routes
+
+// Employee prefix (preferred) for Menu endpoints
+Route::prefix('employee')->middleware(['auth:employee-api'])->group(function () {
+    Route::get('/menu', [MenuController::class, 'index']);
+    Route::post('/menu/check-access', [MenuController::class, 'checkAccess']);
+    Route::post('/menu/clear-cache', [MenuController::class, 'clearCache']);
+    Route::get('/menu/structure', [MenuController::class, 'structure']);
+});
+
+// ==========================================
 // ADMIN PANEL - Management/CRUD
 // ==========================================
-Route::prefix('admin')->middleware(['auth:staff-api', 'throttle:students'])->group(function () {
+Route::prefix('admin')->middleware(['auth:employee-api', 'throttle:students'])->group(function () {
 
     // Students Management
     Route::apiResource('students', AdminStudentController::class);

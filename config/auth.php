@@ -30,8 +30,8 @@ return [
             'provider' => 'admins',
         ],
 
-        // Staff guard (alias of admin-api)
-        'staff-api' => [
+        // Employee guard (preferred alias of admin-api)
+        'employee-api' => [
             'driver' => 'jwt',
             'provider' => 'admins',
         ],

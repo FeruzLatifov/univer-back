@@ -17,11 +17,11 @@ class StaffController extends Controller
     /**
      * Get authenticated staff's profile
      *
-     * @route GET /api/v1/staff/profile
+     * @route GET /api/v1/employee/profile
      */
     public function myProfile()
     {
-        $admin = auth('staff-api')->user();
+        $admin = auth('admin-api')->user();
 
         if (!$admin) {
             return response()->json([
@@ -41,11 +41,11 @@ class StaffController extends Controller
     /**
      * Update authenticated staff's profile
      *
-     * @route PUT /api/v1/staff/profile
+     * @route PUT /api/v1/employee/profile
      */
     public function updateProfile(Request $request)
     {
-        $admin = auth('staff-api')->user();
+        $admin = auth('admin-api')->user();
 
         if (!$admin) {
             return response()->json([
@@ -78,7 +78,7 @@ class StaffController extends Controller
     /**
      * Upload staff avatar
      *
-     * @route POST /api/v1/staff/profile/avatar
+     * @route POST /api/v1/employee/profile/avatar
      */
     public function uploadAvatar(Request $request)
     {
@@ -86,7 +86,7 @@ class StaffController extends Controller
             'image' => 'required|image|mimes:jpeg,png,jpg|max:5120', // 5MB
         ]);
 
-        $admin = auth('staff-api')->user();
+        $admin = auth('admin-api')->user();
 
         if (!$admin) {
             return response()->json([

@@ -38,11 +38,11 @@ class SystemController extends Controller
                 'system_name' => env('SYSTEM_NAME', 'HEMIS Universitet axborot tizimi'),
                 'app_version' => env('APP_VERSION', '1.0.0'),
                 'login_types' => [
-                    'staff' => [
+                    'employee' => [
                         'enabled' => true,
                         'label' => 'Xodim',
-                        'icon' => 'staff',
-                        'endpoint' => '/api/v1/staff/auth/login',
+                        'icon' => 'employee',
+                        'endpoint' => '/api/v1/employee/auth/login',
                     ],
                     'student' => [
                         'enabled' => true,

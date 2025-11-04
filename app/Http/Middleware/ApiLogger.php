@@ -34,9 +34,9 @@ class ApiLogger
         $userId = null;
         $userType = null;
 
-        if ($request->user('staff-api')) {
-            $userId = $request->user('staff-api')->id;
-            $userType = 'staff';
+        if ($request->user('employee-api')) {
+            $userId = $request->user('employee-api')->id;
+            $userType = 'employee';
         } elseif ($request->user('student-api')) {
             $userId = $request->user('student-api')->id;
             $userType = 'student';

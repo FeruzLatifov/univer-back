@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\V1\StudentResource;
 use App\Models\EStudent;
 use App\Models\PasswordResetToken;
+use App\Models\SystemLogin;
+use App\Services\CaptchaService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -31,15 +33,37 @@ class AuthController extends Controller
             'captcha' => 'nullable|string',
         ]);
 
-        // Optional CAPTCHA validation
-        if (filter_var(env('CAPTCHA_ENABLED', false), FILTER_VALIDATE_BOOL)) {
-            if (!$request->filled('captcha')) {
+        // CAPTCHA verification (Google reCAPTCHA v3)
+        $captchaService = app(CaptchaService::class);
+
+        if ($captchaService->isEnabled()) {
+            $captchaResult = $captchaService->verify(
+                $request->input('captcha'),
+                $request->ip(),
+                'student_login' // Action name for reCAPTCHA v3
+            );
+
+            if (!$captchaResult['success']) {
+                logger()->warning('Student login CAPTCHA failed', [
+                    'student_id' => $request->student_id,
+                    'ip' => $request->ip(),
+                    'score' => $captchaResult['score'] ?? 0,
+                    'error_codes' => $captchaResult['error_codes'] ?? [],
+                ]);
+
                 return response()->json([
                     'success' => false,
-                    'message' => 'Captcha talab qilinadi',
+                    'message' => 'CAPTCHA verification failed. Please try again.',
+                    'captcha_error' => $captchaService->getErrorMessage($captchaResult['error_codes'] ?? []),
                 ], 422);
             }
-            // TODO: Verify captcha token via provider
+
+            // Log CAPTCHA success with score
+            logger()->info('Student login CAPTCHA passed', [
+                'student_id' => $request->student_id,
+                'ip' => $request->ip(),
+                'score' => $captchaResult['score'],
+            ]);
         }
 
         $student = EStudent::where('student_id_number', $request->student_id)
@@ -49,6 +73,9 @@ class AuthController extends Controller
 
         // Check password
         if (!$student || !Hash::check($request->password, $student->password)) {
+            // Log failed login attempt
+            SystemLogin::logFailure($request->student_id, SystemLogin::TYPE_LOGIN);
+
             return response()->json([
                 'success' => false,
                 'message' => 'Student ID yoki parol noto\'g\'ri',
@@ -66,6 +93,9 @@ class AuthController extends Controller
                 ];
                 $statusName = $statusMessages[$meta->_student_status] ?? 'Noma\'lum';
 
+                // Log failed login attempt (blocked status)
+                SystemLogin::logFailure($request->student_id, SystemLogin::TYPE_LOGIN);
+
                 return response()->json([
                     'success' => false,
                     'message' => "Sizning statusingiz: {$statusName}. Tizimga kirish mumkin emas.",
@@ -76,6 +106,9 @@ class AuthController extends Controller
 
         // Generate token with student guard
         $token = auth('student-api')->login($student);
+
+        // Log successful login attempt
+        SystemLogin::logSuccess($request->student_id, SystemLogin::TYPE_LOGIN, $student->id);
 
         return response()->json([
             'success' => true,

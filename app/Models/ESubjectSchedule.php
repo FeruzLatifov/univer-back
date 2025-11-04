@@ -79,6 +79,17 @@ class ESubjectSchedule extends Model
     }
 
     /**
+     * Attendance control relationship (if attendance was marked)
+     *
+     * If this relationship exists, it means attendance was taken for this class
+     * If null, attendance has not been marked yet (pending)
+     */
+    public function attendanceControl(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(EAttendanceControl::class, '_subject_schedule');
+    }
+
+    /**
      * Attendance records for this schedule
      */
     public function attendances(): HasMany

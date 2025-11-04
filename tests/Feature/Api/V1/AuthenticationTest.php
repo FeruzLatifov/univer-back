@@ -20,9 +20,9 @@ class AuthenticationTest extends TestCase
     use RefreshDatabase, WithFaker;
 
     /**
-     * Test staff login with valid credentials
+     * Test employee login with valid credentials
      */
-    public function test_staff_can_login_with_valid_credentials(): void
+    public function test_employee_can_login_with_valid_credentials(): void
     {
         // Create a test admin
         $admin = EAdmin::factory()->create([
@@ -32,7 +32,7 @@ class AuthenticationTest extends TestCase
         ]);
 
         // Attempt login
-        $response = $this->postJson('/api/v1/staff/auth/login', [
+        $response = $this->postJson('/api/v1/employee/auth/login', [
             'login' => 'testadmin',
             'password' => 'password123',
         ]);
@@ -64,9 +64,9 @@ class AuthenticationTest extends TestCase
     }
 
     /**
-     * Test staff login with invalid credentials
+     * Test employee login with invalid credentials
      */
-    public function test_staff_cannot_login_with_invalid_credentials(): void
+    public function test_employee_cannot_login_with_invalid_credentials(): void
     {
         $admin = EAdmin::factory()->create([
             'login' => 'testadmin',
@@ -74,7 +74,7 @@ class AuthenticationTest extends TestCase
             'active' => true,
         ]);
 
-        $response = $this->postJson('/api/v1/staff/auth/login', [
+        $response = $this->postJson('/api/v1/employee/auth/login', [
             'login' => 'testadmin',
             'password' => 'wrongpassword',
         ]);
@@ -86,9 +86,9 @@ class AuthenticationTest extends TestCase
     }
 
     /**
-     * Test staff login with inactive account
+     * Test employee login with inactive account
      */
-    public function test_inactive_staff_cannot_login(): void
+    public function test_inactive_employee_cannot_login(): void
     {
         $admin = EAdmin::factory()->create([
             'login' => 'testadmin',
@@ -96,7 +96,7 @@ class AuthenticationTest extends TestCase
             'active' => false,
         ]);
 
-        $response = $this->postJson('/api/v1/staff/auth/login', [
+        $response = $this->postJson('/api/v1/employee/auth/login', [
             'login' => 'testadmin',
             'password' => 'password123',
         ]);
@@ -167,19 +167,19 @@ class AuthenticationTest extends TestCase
     }
 
     /**
-     * Test staff can get their profile
+     * Test employee can get their profile
      */
-    public function test_authenticated_staff_can_get_profile(): void
+    public function test_authenticated_employee_can_get_profile(): void
     {
         $admin = EAdmin::factory()->create([
             'active' => true,
         ]);
 
-        $token = auth('staff-api')->login($admin);
+        $token = auth('employee-api')->login($admin);
 
         $response = $this->withHeaders([
             'Authorization' => "Bearer $token",
-        ])->getJson('/api/v1/staff/auth/me');
+        ])->getJson('/api/v1/employee/auth/me');
 
         $response->assertStatus(200)
             ->assertJson([
@@ -230,22 +230,22 @@ class AuthenticationTest extends TestCase
      */
     public function test_unauthenticated_request_returns_401(): void
     {
-        $response = $this->getJson('/api/v1/staff/auth/me');
+        $response = $this->getJson('/api/v1/employee/auth/me');
 
         $response->assertStatus(401);
     }
 
     /**
-     * Test staff can logout
+     * Test employee can logout
      */
-    public function test_authenticated_staff_can_logout(): void
+    public function test_authenticated_employee_can_logout(): void
     {
         $admin = EAdmin::factory()->create(['active' => true]);
-        $token = auth('staff-api')->login($admin);
+        $token = auth('employee-api')->login($admin);
 
         $response = $this->withHeaders([
             'Authorization' => "Bearer $token",
-        ])->postJson('/api/v1/staff/auth/logout');
+        ])->postJson('/api/v1/employee/auth/logout');
 
         $response->assertStatus(200)
             ->assertJson([
@@ -254,16 +254,16 @@ class AuthenticationTest extends TestCase
     }
 
     /**
-     * Test staff can refresh token
+     * Test employee can refresh token
      */
-    public function test_authenticated_staff_can_refresh_token(): void
+    public function test_authenticated_employee_can_refresh_token(): void
     {
         $admin = EAdmin::factory()->create(['active' => true]);
-        $token = auth('staff-api')->login($admin);
+        $token = auth('employee-api')->login($admin);
 
         $response = $this->withHeaders([
             'Authorization' => "Bearer $token",
-        ])->postJson('/api/v1/staff/auth/refresh');
+        ])->postJson('/api/v1/employee/auth/refresh');
 
         $response->assertStatus(200)
             ->assertJsonStructure([
@@ -277,11 +277,11 @@ class AuthenticationTest extends TestCase
     }
 
     /**
-     * Test validation errors on staff login
+     * Test validation errors on employee login
      */
-    public function test_staff_login_validation_errors(): void
+    public function test_employee_login_validation_errors(): void
     {
-        $response = $this->postJson('/api/v1/staff/auth/login', [
+        $response = $this->postJson('/api/v1/employee/auth/login', [
             'login' => '', // Empty login
             'password' => '123', // Too short
         ]);

@@ -40,6 +40,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'verified' => \App\Http\Middleware\EnsureEmailIsVerified::class,
             'student.status' => \App\Http\Middleware\CheckStudentStatus::class,
             'locale' => \App\Http\Middleware\SetLocale::class,
+            'permission' => \App\Http\Middleware\CheckPermission::class,
+            'load.translations' => \App\Http\Middleware\LoadTranslations::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

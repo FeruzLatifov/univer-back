@@ -39,12 +39,22 @@ Route::middleware('throttle:public')->group(function () {
 
 /*
 |--------------------------------------------------------------------------
-| Authentication Endpoints (Alohida)
+| Authentication Endpoints - Best Practice Structure
 |--------------------------------------------------------------------------
 |
-| Student va Admin uchun ALOHIDA endpoint'lar
-| - /api/student/auth/* - Faqat talabalar
-| - /api/admin/auth/* - Faqat admin/xodimlar
+| URL Structure (Role-based separation):
+| - /api/v1/student/*   → Student endpoints (guard: student-api)
+| - /api/v1/employee/*  → Employee/Admin endpoints (guard: admin-api)
+|
+| Authentication:
+| - POST /api/v1/student/auth/login   → Student login
+| - POST /api/v1/employee/auth/login  → Employee/Admin login (Teacher, Admin, Employee, Rector, etc.)
+|
+| This structure provides:
+| 1. Clear separation between student and employee APIs
+| 2. Easy to apply different middlewares/permissions
+| 3. Scalable for future endpoints
+| 4. Matches database structure (e_student, e_employee, e_admin)
 |
 */
 
@@ -92,81 +102,278 @@ Route::middleware(['auth:student-api', 'throttle:api'])->prefix('student')->grou
     Route::get('/schedule', [\App\Http\Controllers\Api\V1\Student\ScheduleController::class, 'index']);
 });
 
-// Admin/Employee Auth (5 req/min)
-Route::middleware('throttle:auth')->prefix('admin/auth')->group(function () {
-    Route::post('/login', [\App\Http\Controllers\Api\V1\Staff\AuthController::class, 'login']);
+/*
+|--------------------------------------------------------------------------
+| Employee/Admin Authentication
+|--------------------------------------------------------------------------
+| Single endpoint for all staff authentication
+| - Teachers, Admins, Employees, Rectors, etc.
+| - Guard: admin-api
+*/
+Route::middleware('throttle:auth')->prefix('v1/employee/auth')->group(function () {
+    Route::post('/login', [\App\Http\Controllers\Api\V1\Employee\AuthController::class, 'login']);
+    Route::post('/forgot-password', [\App\Http\Controllers\Api\V1\Employee\AuthController::class, 'forgotPassword']);
+    Route::post('/reset-password', [\App\Http\Controllers\Api\V1\Employee\AuthController::class, 'resetPassword']);
 
-    Route::middleware('auth:admin-api')->group(function () {
-        Route::post('/logout', [\App\Http\Controllers\Api\V1\Staff\AuthController::class, 'logout']);
-        Route::post('/refresh', [\App\Http\Controllers\Api\V1\Staff\AuthController::class, 'refresh']);
-        Route::get('/me', [\App\Http\Controllers\Api\V1\Staff\AuthController::class, 'me']);
+    Route::middleware('auth:employee-api')->group(function () {
+        Route::post('/logout', [\App\Http\Controllers\Api\V1\Employee\AuthController::class, 'logout']);
+        Route::post('/refresh', [\App\Http\Controllers\Api\V1\Employee\AuthController::class, 'refresh']);
+        Route::get('/me', [\App\Http\Controllers\Api\V1\Employee\AuthController::class, 'me']);
+        Route::post('/role/switch', [\App\Http\Controllers\Api\V1\Employee\AuthController::class, 'switchRole']);
     });
 });
 
-// Admin/Staff Password Reset (3 req/5min)
-Route::middleware('throttle:password')->prefix('admin/auth')->group(function () {
-    Route::post('/forgot-password', [\App\Http\Controllers\Api\V1\Staff\AuthController::class, 'forgotPassword']);
-    Route::post('/reset-password', [\App\Http\Controllers\Api\V1\Staff\AuthController::class, 'resetPassword']);
+/*
+|--------------------------------------------------------------------------
+| Employee Dashboard & Resources
+|--------------------------------------------------------------------------
+| Endpoints for admin/teacher/employee dashboard and resources
+| Guard: admin-api
+*/
+Route::middleware(['auth:employee-api', 'throttle:api'])->prefix('v1/employee')->group(function () {
+    // Dashboard
+    Route::get('/dashboard', [\App\Http\Controllers\Api\V1\Employee\DashboardController::class, 'index']);
+
+    // Document Signing
+    Route::prefix('documents')->group(function () {
+        Route::get('/sign', [\App\Http\Controllers\Api\V1\Employee\DocumentController::class, 'index']);
+        Route::get('/stats', [\App\Http\Controllers\Api\V1\Employee\DocumentController::class, 'stats']);
+        Route::get('/{id}', [\App\Http\Controllers\Api\V1\Employee\DocumentController::class, 'show']);
+    });
 });
+
+/*
+|--------------------------------------------------------------------------
+| Teacher Routes
+|--------------------------------------------------------------------------
+| Endpoints for teacher-specific functionality
+| Guard: employee-api (teachers are employees with role=teacher)
+*/
+Route::middleware(['auth:employee-api', 'throttle:api'])->prefix('v1/teacher')->group(function () {
+    // Dashboard
+    Route::get('/dashboard', [\App\Http\Controllers\Api\V1\Teacher\DashboardController::class, 'index']);
+    Route::get('/dashboard/activities', [\App\Http\Controllers\Api\V1\Teacher\DashboardController::class, 'activities']);
+    Route::get('/dashboard/stats', [\App\Http\Controllers\Api\V1\Teacher\DashboardController::class, 'stats']);
+
+    // Schedule & Timetable
+    Route::prefix('schedule')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\V1\Teacher\ScheduleController::class, 'index']);
+        Route::get('/day/{day}', [\App\Http\Controllers\Api\V1\Teacher\ScheduleController::class, 'day']);
+        Route::get('/workload', [\App\Http\Controllers\Api\V1\Teacher\ScheduleController::class, 'workload']);
+    });
+
+    // Groups & Students
+    Route::get('/groups', [\App\Http\Controllers\Api\V1\Teacher\ScheduleController::class, 'groups']);
+    Route::prefix('students')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\V1\Teacher\SubjectController::class, 'students']);
+        Route::get('/{id}', [\App\Http\Controllers\Api\V1\Teacher\SubjectController::class, 'student']);
+    });
+
+    // Subjects
+    Route::prefix('subjects')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\V1\Teacher\SubjectController::class, 'index']);
+        Route::get('/{id}', [\App\Http\Controllers\Api\V1\Teacher\SubjectController::class, 'show']);
+    });
+
+    // Attendance
+    Route::prefix('attendance')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\V1\Teacher\AttendanceController::class, 'index']);
+        Route::get('/{scheduleId}', [\App\Http\Controllers\Api\V1\Teacher\AttendanceController::class, 'show']);
+        Route::post('/', [\App\Http\Controllers\Api\V1\Teacher\AttendanceController::class, 'store']);
+        Route::put('/{id}', [\App\Http\Controllers\Api\V1\Teacher\AttendanceController::class, 'update']);
+    });
+
+    // Grades & Performance
+    Route::prefix('grades')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\V1\Teacher\GradeController::class, 'index']);
+        Route::get('/{subjectId}', [\App\Http\Controllers\Api\V1\Teacher\GradeController::class, 'bySubject']);
+        Route::post('/', [\App\Http\Controllers\Api\V1\Teacher\GradeController::class, 'store']);
+        Route::put('/{id}', [\App\Http\Controllers\Api\V1\Teacher\GradeController::class, 'update']);
+    });
+
+    // Assignments & Tasks
+    Route::prefix('assignments')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\V1\Teacher\AssignmentController::class, 'index']);
+        Route::get('/{id}', [\App\Http\Controllers\Api\V1\Teacher\AssignmentController::class, 'show']);
+        Route::post('/', [\App\Http\Controllers\Api\V1\Teacher\AssignmentController::class, 'store']);
+        Route::put('/{id}', [\App\Http\Controllers\Api\V1\Teacher\AssignmentController::class, 'update']);
+        Route::delete('/{id}', [\App\Http\Controllers\Api\V1\Teacher\AssignmentController::class, 'destroy']);
+        Route::get('/{id}/submissions', [\App\Http\Controllers\Api\V1\Teacher\AssignmentController::class, 'submissions']);
+        Route::post('/submissions/{id}/grade', [\App\Http\Controllers\Api\V1\Teacher\AssignmentController::class, 'gradeSubmission']);
+    });
+
+    // Exams
+    Route::prefix('exams')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\V1\Teacher\ExamController::class, 'index']);
+        Route::get('/{id}', [\App\Http\Controllers\Api\V1\Teacher\ExamController::class, 'show']);
+        Route::get('/{id}/students', [\App\Http\Controllers\Api\V1\Teacher\ExamController::class, 'students']);
+    });
+
+    // Resources & Materials
+    Route::prefix('resources')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\V1\Teacher\ResourceController::class, 'index']);
+        Route::get('/{id}', [\App\Http\Controllers\Api\V1\Teacher\ResourceController::class, 'show']);
+        Route::post('/', [\App\Http\Controllers\Api\V1\Teacher\ResourceController::class, 'store']);
+        Route::put('/{id}', [\App\Http\Controllers\Api\V1\Teacher\ResourceController::class, 'update']);
+        Route::delete('/{id}', [\App\Http\Controllers\Api\V1\Teacher\ResourceController::class, 'destroy']);
+    });
+
+    // Topics (Mavzular)
+    Route::prefix('topics')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\V1\Teacher\TopicController::class, 'index']);
+        Route::get('/{id}', [\App\Http\Controllers\Api\V1\Teacher\TopicController::class, 'show']);
+        Route::post('/', [\App\Http\Controllers\Api\V1\Teacher\TopicController::class, 'store']);
+        Route::put('/{id}', [\App\Http\Controllers\Api\V1\Teacher\TopicController::class, 'update']);
+        Route::delete('/{id}', [\App\Http\Controllers\Api\V1\Teacher\TopicController::class, 'destroy']);
+    });
+
+    // Tests & Quizzes
+    Route::prefix('tests')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\V1\Teacher\TestController::class, 'index']);
+        Route::get('/{id}', [\App\Http\Controllers\Api\V1\Teacher\TestController::class, 'show']);
+        Route::post('/', [\App\Http\Controllers\Api\V1\Teacher\TestController::class, 'store']);
+        Route::put('/{id}', [\App\Http\Controllers\Api\V1\Teacher\TestController::class, 'update']);
+        Route::delete('/{id}', [\App\Http\Controllers\Api\V1\Teacher\TestController::class, 'destroy']);
+        Route::get('/{id}/results', [\App\Http\Controllers\Api\V1\Teacher\TestController::class, 'results']);
+    });
+});
+
 
 /*
 |--------------------------------------------------------------------------
 | Protected Admin Routes
 |--------------------------------------------------------------------------
 |
-| Faqat admin-api guard bilan himoyalangan
-| Admin va xodimlar uchun CRUD operatsiyalar
+| SECURITY: Authentication + Permission middleware
+| - auth:admin-api - Require logged in admin
+| - permission:X - Require specific permission (Dual mode: Spatie + Yii2)
+|
+| Permission Format: resource.action
+| - student.view, student.create, student.edit, student.delete
+| - employee.view, employee.create, employee.edit, employee.delete
 |
 */
 Route::middleware(['auth:admin-api', 'throttle:students'])->group(function () {
-    // Student routes
+
+    // ============================================
+    // STUDENT ROUTES (CRUD with permissions)
+    // ============================================
     Route::prefix('students')->group(function () {
-        Route::get('/', [\App\Http\Controllers\Api\StudentController::class, 'index']);
-        Route::get('/{student}', [\App\Http\Controllers\Api\StudentController::class, 'show']);
-        Route::post('/', [\App\Http\Controllers\Api\StudentController::class, 'store']);
-        Route::put('/{student}', [\App\Http\Controllers\Api\StudentController::class, 'update']);
-        Route::delete('/{student}', [\App\Http\Controllers\Api\StudentController::class, 'destroy']);
-        Route::post('/{student}/upload-image', [\App\Http\Controllers\Api\StudentController::class, 'uploadImage']);
+        // View permissions
+        Route::middleware('permission:student.view')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\StudentController::class, 'index']);
+            Route::get('/{student}', [\App\Http\Controllers\Api\StudentController::class, 'show']);
+        });
+
+        // Create permission
+        Route::middleware('permission:student.create')->group(function () {
+            Route::post('/', [\App\Http\Controllers\Api\StudentController::class, 'store']);
+            Route::post('/{student}/upload-image', [\App\Http\Controllers\Api\StudentController::class, 'uploadImage']);
+        });
+
+        // Edit permission
+        Route::middleware('permission:student.edit')->group(function () {
+            Route::put('/{student}', [\App\Http\Controllers\Api\StudentController::class, 'update']);
+        });
+
+        // Delete permission
+        Route::middleware('permission:student.delete')->group(function () {
+            Route::delete('/{student}', [\App\Http\Controllers\Api\StudentController::class, 'destroy']);
+        });
     });
 
-    // Group routes
+    // ============================================
+    // GROUP ROUTES (CRUD with permissions)
+    // ============================================
     Route::prefix('groups')->group(function () {
-        Route::get('/', [\App\Http\Controllers\Api\GroupController::class, 'index']);
-        Route::get('/{group}', [\App\Http\Controllers\Api\GroupController::class, 'show']);
-        Route::post('/', [\App\Http\Controllers\Api\GroupController::class, 'store']);
-        Route::put('/{group}', [\App\Http\Controllers\Api\GroupController::class, 'update']);
-        Route::delete('/{group}', [\App\Http\Controllers\Api\GroupController::class, 'destroy']);
+        Route::middleware('permission:group.view')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\GroupController::class, 'index']);
+            Route::get('/{group}', [\App\Http\Controllers\Api\GroupController::class, 'show']);
+        });
+
+        Route::middleware('permission:group.create')->group(function () {
+            Route::post('/', [\App\Http\Controllers\Api\GroupController::class, 'store']);
+        });
+
+        Route::middleware('permission:group.edit')->group(function () {
+            Route::put('/{group}', [\App\Http\Controllers\Api\GroupController::class, 'update']);
+        });
+
+        Route::middleware('permission:group.delete')->group(function () {
+            Route::delete('/{group}', [\App\Http\Controllers\Api\GroupController::class, 'destroy']);
+        });
     });
 
-    // Specialty routes
+    // ============================================
+    // SPECIALTY ROUTES (CRUD with permissions)
+    // ============================================
     Route::prefix('specialties')->group(function () {
-        Route::get('/', [\App\Http\Controllers\Api\SpecialtyController::class, 'index']);
-        Route::get('/{specialty}', [\App\Http\Controllers\Api\SpecialtyController::class, 'show']);
-        Route::post('/', [\App\Http\Controllers\Api\SpecialtyController::class, 'store']);
-        Route::put('/{specialty}', [\App\Http\Controllers\Api\SpecialtyController::class, 'update']);
-        Route::delete('/{specialty}', [\App\Http\Controllers\Api\SpecialtyController::class, 'destroy']);
+        Route::middleware('permission:specialty.view')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\SpecialtyController::class, 'index']);
+            Route::get('/{specialty}', [\App\Http\Controllers\Api\SpecialtyController::class, 'show']);
+        });
+
+        Route::middleware('permission:specialty.create')->group(function () {
+            Route::post('/', [\App\Http\Controllers\Api\SpecialtyController::class, 'store']);
+        });
+
+        Route::middleware('permission:specialty.edit')->group(function () {
+            Route::put('/{specialty}', [\App\Http\Controllers\Api\SpecialtyController::class, 'update']);
+        });
+
+        Route::middleware('permission:specialty.delete')->group(function () {
+            Route::delete('/{specialty}', [\App\Http\Controllers\Api\SpecialtyController::class, 'destroy']);
+        });
     });
 
-    // Department routes
+    // ============================================
+    // DEPARTMENT ROUTES (CRUD with permissions)
+    // ============================================
     Route::prefix('departments')->group(function () {
-        Route::get('/', [\App\Http\Controllers\Api\DepartmentController::class, 'index']);
-        Route::get('/{department}', [\App\Http\Controllers\Api\DepartmentController::class, 'show']);
-        Route::post('/', [\App\Http\Controllers\Api\DepartmentController::class, 'store']);
-        Route::put('/{department}', [\App\Http\Controllers\Api\DepartmentController::class, 'update']);
-        Route::delete('/{department}', [\App\Http\Controllers\Api\DepartmentController::class, 'destroy']);
+        Route::middleware('permission:department.view')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\DepartmentController::class, 'index']);
+            Route::get('/{department}', [\App\Http\Controllers\Api\DepartmentController::class, 'show']);
+        });
+
+        Route::middleware('permission:department.create')->group(function () {
+            Route::post('/', [\App\Http\Controllers\Api\DepartmentController::class, 'store']);
+        });
+
+        Route::middleware('permission:department.edit')->group(function () {
+            Route::put('/{department}', [\App\Http\Controllers\Api\DepartmentController::class, 'update']);
+        });
+
+        Route::middleware('permission:department.delete')->group(function () {
+            Route::delete('/{department}', [\App\Http\Controllers\Api\DepartmentController::class, 'destroy']);
+        });
     });
 
-    // Employee routes
+    // ============================================
+    // EMPLOYEE ROUTES (CRUD with permissions)
+    // ============================================
     Route::prefix('employees')->group(function () {
-        Route::get('/', [\App\Http\Controllers\Api\EmployeeController::class, 'index']);
-        Route::get('/{employee}', [\App\Http\Controllers\Api\EmployeeController::class, 'show']);
-        Route::post('/', [\App\Http\Controllers\Api\EmployeeController::class, 'store']);
-        Route::put('/{employee}', [\App\Http\Controllers\Api\EmployeeController::class, 'update']);
-        Route::delete('/{employee}', [\App\Http\Controllers\Api\EmployeeController::class, 'destroy']);
+        Route::middleware('permission:employee.view')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\EmployeeController::class, 'index']);
+            Route::get('/{employee}', [\App\Http\Controllers\Api\EmployeeController::class, 'show']);
+        });
+
+        Route::middleware('permission:employee.create')->group(function () {
+            Route::post('/', [\App\Http\Controllers\Api\EmployeeController::class, 'store']);
+        });
+
+        Route::middleware('permission:employee.edit')->group(function () {
+            Route::put('/{employee}', [\App\Http\Controllers\Api\EmployeeController::class, 'update']);
+        });
+
+        Route::middleware('permission:employee.delete')->group(function () {
+            Route::delete('/{employee}', [\App\Http\Controllers\Api\EmployeeController::class, 'destroy']);
+        });
     });
 
-    // HEMIS Integration routes (admin only)
-    Route::prefix('hemis')->middleware('throttle:10,1')->group(function () {
+    // ============================================
+    // HEMIS INTEGRATION ROUTES (Admin only)
+    // ============================================
+    Route::prefix('hemis')->middleware(['throttle:10,1', 'permission:hemis.sync'])->group(function () {
         Route::get('/check', [\App\Http\Controllers\Api\HemisController::class, 'checkConnection']);
         Route::post('/sync/students', [\App\Http\Controllers\Api\HemisController::class, 'syncStudents']);
         Route::post('/push/student/{studentId}', [\App\Http\Controllers\Api\HemisController::class, 'pushStudent']);

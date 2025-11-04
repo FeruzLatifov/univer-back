@@ -31,7 +31,7 @@ class StudentCrudTest extends TestCase
             '_role' => 'admin',
         ]);
 
-        $this->token = auth('staff-api')->login($this->admin);
+        $this->token = auth('employee-api')->login($this->admin);
     }
 
     /**

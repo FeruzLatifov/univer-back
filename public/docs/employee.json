@@ -1,0 +1,213 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Employee API (Yii2-Compatible Permissions)",
+    "version": "1.0.0",
+    "description": "Xodimlar uchun autentifikatsiya, rollar va dinamik menyu API. Ruxsatlar Yii2 dagidek route-path bo'yicha (e_admin_resource) tekshiriladi."
+  },
+  "servers": [
+    { "url": "/api", "description": "Laravel API base" }
+  ],
+  "tags": [
+    { "name": "Auth (Employee)", "description": "Login/Logout/Refresh/Me/Rol almashish" },
+    { "name": "Menu (Employee)", "description": "Dinamik menyu va ruxsat tekshiruvi" }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT" }
+    },
+    "schemas": {
+      "EmployeeLoginRequest": {
+        "type": "object",
+        "required": ["login", "password"],
+        "properties": {
+          "login": { "type": "string", "example": "teacher01" },
+          "password": { "type": "string", "format": "password", "example": "secret123" }
+        }
+      },
+      "EmployeeUser": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 123 },
+          "full_name": { "type": "string", "example": "Aliyev Alisher" },
+          "login": { "type": "string", "example": "teacher01" },
+          "role_id": { "type": "integer", "example": 7 },
+          "role_code": { "type": "string", "example": "teacher" },
+          "roles": { "type": "array", "items": { "type": "object" } },
+          "permissions": { "type": "array", "items": { "type": "string" }, "description": "Dot hamda route ko'rinishidagi ruxsatlar" }
+        }
+      },
+      "EmployeeLoginResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "example": true },
+          "data": {
+            "type": "object",
+            "properties": {
+              "access_token": { "type": "string", "example": "<JWT>" },
+              "token_type": { "type": "string", "example": "bearer" },
+              "expires_in": { "type": "integer", "example": 3600 },
+              "user": { "$ref": "#/components/schemas/EmployeeUser" }
+            }
+          }
+        }
+      },
+      "MenuItem": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "example": "employee/teacher-load-formation" },
+          "label": { "type": "string", "example": "Shaxsiy ish reja" },
+          "url": { "type": "string", "example": "/employee/teacher-load-formation" },
+          "icon": { "type": "string", "example": "clipboard-list" },
+          "permission": { "type": "string", "nullable": true, "example": "employee/teacher-load-formation" },
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/MenuItem" } },
+          "active": { "type": "boolean", "example": true },
+          "order": { "type": "integer", "nullable": true, "example": 10 }
+        }
+      },
+      "MenuResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "example": true },
+          "data": {
+            "type": "object",
+            "properties": {
+              "menu": { "type": "array", "items": { "$ref": "#/components/schemas/MenuItem" } },
+              "permissions": { "type": "array", "items": { "type": "string" } },
+              "locale": { "type": "string", "example": "uz" }
+            }
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "cached": { "type": "boolean", "example": false },
+              "cache_expires_at": { "type": "integer", "nullable": true },
+              "generated_at": { "type": "string", "format": "date-time" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/v1/employee/auth/login": {
+      "post": {
+        "tags": ["Auth (Employee)"],
+        "summary": "Login (Employee)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/EmployeeLoginRequest" } }
+          }
+        },
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EmployeeLoginResponse" } } } },
+          "401": { "description": "Unauthorized" }
+        }
+      }
+    },
+    "/v1/employee/auth/logout": { "post": { "tags": ["Auth (Employee)"], "summary": "Logout", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" }, "401": { "description": "Unauthorized" } } } },
+    "/v1/employee/auth/refresh": { "post": { "tags": ["Auth (Employee)"], "summary": "Refresh token", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" }, "401": { "description": "Unauthorized" } } } },
+    "/v1/employee/auth/me": { "get": { "tags": ["Auth (Employee)"], "summary": "Current user info", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" }, "401": { "description": "Unauthorized" } } } },
+    "/v1/employee/auth/role/switch": { "post": { "tags": ["Auth (Employee)"], "summary": "Switch active role", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" }, "401": { "description": "Unauthorized" }, "403": { "description": "Forbidden" } } } },
+    "/v1/employee/menu": { "get": { "tags": ["Menu (Employee)"], "summary": "Get filtered menu", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" }, "401": { "description": "Unauthorized" } } } },
+    "/v1/employee/menu/check-access": { "post": { "tags": ["Menu (Employee)"], "summary": "Check access to a legacy path", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" }, "401": { "description": "Unauthorized" } } } },
+    "/v1/employee/menu/clear-cache": { "post": { "tags": ["Menu (Employee)"], "summary": "Clear menu cache for current user", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" }, "401": { "description": "Unauthorized" } } } },
+    "/v1/employee/menu/structure": { "get": { "tags": ["Menu (Employee)"], "summary": "Get full menu structure (admin only)", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" }, "401": { "description": "Unauthorized" }, "403": { "description": "Forbidden" } } } }
+  }
+}
+
+{
+  "openapi": "3.0.3",
+  "info": { "title": "Employee API (Yii2-Compatible Permissions)", "version": "1.0.0" },
+  "servers": [{ "url": "/api" }],
+  "tags": [ { "name": "Auth (Employee)" }, { "name": "Menu (Employee)" }, { "name": "Documents (Employee)" } ],
+  "components": {
+    "securitySchemes": { "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT" } },
+    "schemas": {
+      "SignItem": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 101 },
+          "hash": { "type": "string", "example": "1c7b4a88-6e1e-4e2c-8d3f-0a3e1f8c1d2e" },
+          "title": { "type": "string", "example": "Buyruq loyihasi" },
+          "type": { "type": "string", "example": "common\\models\\academic\\EDecreeInfo" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "status": { "type": "string", "enum": ["pending","signed"], "example": "pending" },
+          "can_sign": { "type": "boolean", "example": true }
+        }
+      },
+      "SignList": {
+        "type": "object",
+        "properties": {
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/SignItem" } },
+          "pagination": {
+            "type": "object",
+            "properties": {
+              "current_page": { "type": "integer", "example": 1 },
+              "last_page": { "type": "integer", "example": 5 },
+              "per_page": { "type": "integer", "example": 20 },
+              "total": { "type": "integer", "example": 92 }
+            }
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/v1/employee/auth/login": { "post": { "tags": ["Auth (Employee)"], "summary": "Login", "responses": { "200": { "description": "OK" } } } },
+    "/v1/employee/auth/logout": { "post": { "tags": ["Auth (Employee)"], "summary": "Logout", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" } } } },
+    "/v1/employee/auth/refresh": { "post": { "tags": ["Auth (Employee)"], "summary": "Refresh", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" } } } },
+    "/v1/employee/auth/me": { "get": { "tags": ["Auth (Employee)"], "summary": "Me", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" } } } },
+    "/v1/employee/auth/role/switch": { "post": { "tags": ["Auth (Employee)"], "summary": "Switch role", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" } } } },
+    "/v1/employee/menu": { "get": { "tags": ["Menu (Employee)"], "summary": "Get menu", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" } } } },
+    "/v1/employee/menu/check-access": { "post": { "tags": ["Menu (Employee)"], "summary": "Check access", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" } } } },
+    "/v1/employee/menu/clear-cache": { "post": { "tags": ["Menu (Employee)"], "summary": "Clear menu cache", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" } } } },
+    "/v1/employee/menu/structure": { "get": { "tags": ["Menu (Employee)"], "summary": "Menu structure", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" } } } },
+    
+    "/v1/employee/documents/sign": {
+      "get": {
+        "tags": ["Documents (Employee)"],
+        "summary": "List documents to sign",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "query", "name": "status", "schema": { "type": "string", "enum": ["pending","signed"] } },
+          { "in": "query", "name": "q", "schema": { "type": "string" }, "description": "Search in title" },
+          { "in": "query", "name": "type", "schema": { "type": "string" } },
+          { "in": "query", "name": "date_from", "schema": { "type": "string", "format": "date" } },
+          { "in": "query", "name": "date_to", "schema": { "type": "string", "format": "date" } }
+        ],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": {"type":"boolean"}, "data": { "$ref": "#/components/schemas/SignList" } } } } } } }
+      }
+    },
+    "/v1/employee/documents/{hash}/view": {
+      "get": {
+        "tags": ["Documents (Employee)"],
+        "summary": "Get printable view URL",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [ { "in": "path", "name": "hash", "required": true, "schema": { "type": "string" } } ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/employee/documents/{hash}/sign": {
+      "post": {
+        "tags": ["Documents (Employee)"],
+        "summary": "Create sign request and get redirect URL",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [ { "in": "path", "name": "hash", "required": true, "schema": { "type": "string" } } ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/employee/documents/{hash}/status": {
+      "post": {
+        "tags": ["Documents (Employee)"],
+        "summary": "Get latest document sign status",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [ { "in": "path", "name": "hash", "required": true, "schema": { "type": "string" } } ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    }
+  }
+}
+
+

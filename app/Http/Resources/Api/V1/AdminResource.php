@@ -35,6 +35,19 @@ class AdminResource extends JsonResource
             $rolesCollection = collect([$activeRole]);
         }
 
+        // Get user permissions (from our new system)
+        $permissions = [];
+        try {
+            if (method_exists($this->resource, 'getAllPermissions')) {
+                $permissions = $this->resource->getAllPermissions();
+            }
+        } catch (\Throwable $e) {
+            logger()->warning('[AdminResource] Failed to get permissions', [
+                'user_id' => $this->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
         return [
             'id' => $this->id,
             'type' => 'admin',
@@ -54,6 +67,7 @@ class AdminResource extends JsonResource
                     'name' => method_exists($role, 'getDisplayNameAttribute') ? $role->display_name : ($role->name ?? $role->code),
                 ])
                 ->values(),
+            'permissions' => $permissions, // NEW: Add permissions to JWT
             'status' => $this->status,
             'active' => $this->status === 'enable', // Map status to active for frontend
             'employee' => $this->whenLoaded('employee', function () {

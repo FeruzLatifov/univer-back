@@ -59,7 +59,7 @@ Barcha himoyalangan API lar JWT Bearer token talab qiladi.
 **Token olish:**
 ```bash
 POST /api/v1/student/auth/login
-POST /api/v1/staff/auth/login
+POST /api/v1/employee/auth/login
 ```
 
 **Token ishlatish:**
@@ -70,7 +70,7 @@ Authorization: Bearer YOUR_JWT_TOKEN
 **Token yangilash:**
 ```bash
 POST /api/v1/student/auth/refresh
-POST /api/v1/staff/auth/refresh
+POST /api/v1/employee/auth/refresh
 ```
 
 ## 📊 Response Format
@@ -155,11 +155,11 @@ Telegram: @univer_support
  *         description="Baholash tizimi"
  *     ),
  *     @OA\Tag(
- *         name="Staff - Auth",
+ *         name="Employee - Auth",
  *         description="Xodim autentifikatsiya"
  *     ),
  *     @OA\Tag(
- *         name="Staff - Profile",
+ *         name="Employee - Profile",
  *         description="Xodim profil"
  *     )
  * )
