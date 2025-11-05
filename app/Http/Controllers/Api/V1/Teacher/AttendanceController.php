@@ -3,111 +3,192 @@
 namespace App\Http\Controllers\Api\V1\Teacher;
 
 use App\Http\Controllers\Controller;
-use App\Models\EAttendance;
-use App\Models\ESubjectSchedule;
-use App\Models\EStudent;
+use App\Services\Teacher\AttendanceService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 /**
  * Teacher Attendance Controller
  *
- * Manages attendance marking and reports
+ * MODULAR MONOLITH - Teacher Module
+ * HTTP LAYER ONLY - No business logic!
+ *
+ * Clean Architecture:
+ * Controller → Service → Repository → Model
+ *
+ * @package App\Http\Controllers\Api\V1\Teacher
  */
 class AttendanceController extends Controller
 {
     use ApiResponse;
 
     /**
+     * Attendance Service (injected)
+     */
+    private AttendanceService $attendanceService;
+
+    /**
+     * Constructor with dependency injection
+     */
+    public function __construct(AttendanceService $attendanceService)
+    {
+        $this->attendanceService = $attendanceService;
+    }
+
+    /**
      * Get attendance list for a subject schedule
      *
-     * GET /api/v1/teacher/subject/{id}/attendance
-     *
-     * @param Request $request
-     * @param int $id Subject ID
-     * @return JsonResponse
+     * @OA\Get(
+     *     path="/api/v1/teacher/subject/{id}/attendance",
+     *     tags={"Teacher - Attendance"},
+     *     summary="Get attendance list for a subject schedule",
+     *     description="Returns a list of students with their attendance status for a specific subject schedule and date",
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         description="Subject ID",
+     *         required=true,
+     *         @OA\Schema(type="integer", example=1)
+     *     ),
+     *     @OA\Parameter(
+     *         name="date",
+     *         in="query",
+     *         description="Attendance date (defaults to today)",
+     *         required=false,
+     *         @OA\Schema(type="string", format="date", example="2025-01-15")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Successful response",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Davomat ro'yxati"),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="array",
+     *                 @OA\Items(
+     *                     @OA\Property(property="student_id", type="integer", example=1),
+     *                     @OA\Property(property="student_name", type="string", example="John Doe"),
+     *                     @OA\Property(property="student_code", type="string", example="STU001"),
+     *                     @OA\Property(property="status", type="string", example="11", description="11=present, 12=absent, 13=late, 14=excused"),
+     *                     @OA\Property(property="reason", type="string", nullable=true, example="Kasallik")
+     *                 )
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Teacher profile or subject not found",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Teacher profile not found")
+     *         )
+     *     ),
+     *     @OA\Response(response=401, description="Unauthenticated"),
+     *     @OA\Response(response=403, description="Forbidden")
+     * )
      */
     public function index(Request $request, int $id): JsonResponse
     {
         $teacher = $request->user();
+        $teacherId = $teacher->employee->id ?? null;
         $date = $request->input('date', now()->format('Y-m-d'));
 
-        // Verify teacher teaches this subject
-        $schedule = ESubjectSchedule::where('_subject', $id)
-            ->where('_employee', $teacher->employee->id)
-            ->where('active', true)
-            ->with(['group', 'subject'])
-            ->first();
-
-        if (!$schedule) {
-            return $this->forbiddenResponse('Sizda bu fanga kirish huquqi yo\'q');
+        if (!$teacherId) {
+            return $this->errorResponse('Teacher profile not found', 404);
         }
 
-        // Get students from group
-        $students = EStudent::where('_group', $schedule->_group)
-            ->where('active', true)
-            ->get();
+        try {
+            // Delegate to service
+            $attendanceList = $this->attendanceService->getAttendanceList($teacherId, $id, $date);
 
-        // Get attendance records for the date
-        $attendanceRecords = EAttendance::where('_subject_schedule', $schedule->id)
-            ->where('lesson_date', $date)
-            ->get()
-            ->keyBy('_student');
+            return $this->successResponse($attendanceList, 'Davomat ro\'yxati');
 
-        // Build student list with attendance status
-        $studentList = $students->map(function ($student) use ($attendanceRecords) {
-            $attendance = $attendanceRecords->get($student->id);
-
-            return [
-                'id' => $student->id,
-                'student_id' => $student->student_id_number,
-                'full_name' => $student->full_name,
-                'photo' => $student->image,
-                'attendance_status' => $attendance ? $attendance->_attendance_type : null,
-                'attendance_status_name' => $attendance ? $attendance->status_name : 'Belgilanmagan',
-                'reason' => $attendance ? $attendance->reason : null,
-            ];
-        });
-
-        return $this->successResponse([
-            'subject' => [
-                'id' => $schedule->subject->id,
-                'name' => $schedule->subject->name,
-            ],
-            'group' => [
-                'id' => $schedule->group->id,
-                'name' => $schedule->group->name,
-            ],
-            'date' => $date,
-            'students' => $studentList,
-        ], 'Davomat ro\'yxati');
+        } catch (\Exception $e) {
+            return $this->forbiddenResponse($e->getMessage());
+        }
     }
 
     /**
      * Mark attendance for students
      *
-     * POST /api/v1/teacher/attendance/mark
-     *
-     * Body:
-     * {
-     *   "subject_schedule_id": 123,
-     *   "date": "2025-01-15",
-     *   "attendance": [
-     *     {"student_id": 1, "status": "11"},
-     *     {"student_id": 2, "status": "12", "reason": "Kasallik"}
-     *   ]
-     * }
-     *
-     * @param Request $request
-     * @return JsonResponse
+     * @OA\Post(
+     *     path="/api/v1/teacher/attendance/mark",
+     *     tags={"Teacher - Attendance"},
+     *     summary="Mark attendance for students",
+     *     description="Records attendance status for multiple students in a single request. Statuses: 11=present, 12=absent, 13=late, 14=excused",
+     *     security={{"bearerAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"subject_schedule_id", "date", "attendance"},
+     *             @OA\Property(
+     *                 property="subject_schedule_id",
+     *                 type="integer",
+     *                 example=123,
+     *                 description="Subject schedule ID (must exist)"
+     *             ),
+     *             @OA\Property(
+     *                 property="date",
+     *                 type="string",
+     *                 format="date",
+     *                 example="2025-01-15",
+     *                 description="Attendance date"
+     *             ),
+     *             @OA\Property(
+     *                 property="attendance",
+     *                 type="array",
+     *                 description="Array of student attendance records",
+     *                 @OA\Items(
+     *                     type="object",
+     *                     required={"student_id", "status"},
+     *                     @OA\Property(property="student_id", type="integer", example=1, description="Student ID"),
+     *                     @OA\Property(property="status", type="string", enum={"11", "12", "13", "14"}, example="11", description="Attendance status"),
+     *                     @OA\Property(property="reason", type="string", nullable=true, maxLength=500, example="Kasallik", description="Reason for absence/late")
+     *                 )
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Attendance marked successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Davomat muvaffaqiyatli belgilandi"),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(property="marked_count", type="integer", example=25),
+     *                 @OA\Property(property="date", type="string", example="2025-01-15")
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Validation error",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="The attendance field is required")
+     *         )
+     *     ),
+     *     @OA\Response(response=404, description="Teacher profile not found"),
+     *     @OA\Response(response=401, description="Unauthenticated"),
+     *     @OA\Response(response=500, description="Server error")
+     * )
      */
     public function mark(Request $request): JsonResponse
     {
         $teacher = $request->user();
+        $teacherId = $teacher->employee->id ?? null;
 
+        if (!$teacherId) {
+            return $this->errorResponse('Teacher profile not found', 404);
+        }
+
+        // Validate request
         $validator = Validator::make($request->all(), [
             'subject_schedule_id' => 'required|exists:e_subject_schedule,id',
             'date' => 'required|date',
@@ -121,65 +202,97 @@ class AttendanceController extends Controller
             return $this->validationErrorResponse($validator->errors());
         }
 
-        // Verify teacher has access to this schedule
-        $schedule = ESubjectSchedule::where('id', $request->subject_schedule_id)
-            ->where('_employee', $teacher->employee->id)
-            ->where('active', true)
-            ->first();
-
-        if (!$schedule) {
-            return $this->forbiddenResponse('Sizda bu darsga kirish huquqi yo\'q');
-        }
-
         try {
-            DB::beginTransaction();
+            // Delegate to service
+            $result = $this->attendanceService->markAttendance(
+                $teacherId,
+                $request->subject_schedule_id,
+                $request->date,
+                $request->attendance
+            );
 
-            $markedCount = 0;
-
-            foreach ($request->attendance as $attendanceData) {
-                // Update or create attendance record
-                EAttendance::updateOrCreate(
-                    [
-                        '_student' => $attendanceData['student_id'],
-                        '_subject_schedule' => $request->subject_schedule_id,
-                        'lesson_date' => $request->date,
-                    ],
-                    [
-                        '_attendance_type' => $attendanceData['status'],
-                        'reason' => $attendanceData['reason'] ?? null,
-                        'active' => true,
-                    ]
-                );
-
-                $markedCount++;
-            }
-
-            DB::commit();
-
-            return $this->successResponse([
-                'marked_count' => $markedCount,
-                'date' => $request->date,
-            ], 'Davomat muvaffaqiyatli belgilandi');
+            return $this->successResponse($result, 'Davomat muvaffaqiyatli belgilandi');
 
         } catch (\Exception $e) {
-            DB::rollBack();
-            return $this->serverErrorResponse('Davomat belgilashda xatolik: ' . $e->getMessage());
+            return $this->serverErrorResponse($e->getMessage());
         }
     }
 
     /**
      * Update single attendance record
      *
-     * PUT /api/v1/teacher/attendance/{id}
-     *
-     * @param Request $request
-     * @param int $id Attendance ID
-     * @return JsonResponse
+     * @OA\Put(
+     *     path="/api/v1/teacher/attendance/{id}",
+     *     tags={"Teacher - Attendance"},
+     *     summary="Update single attendance record",
+     *     description="Updates the status and reason for an existing attendance record",
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         description="Attendance record ID",
+     *         required=true,
+     *         @OA\Schema(type="integer", example=1)
+     *     ),
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"status"},
+     *             @OA\Property(
+     *                 property="status",
+     *                 type="string",
+     *                 enum={"11", "12", "13", "14"},
+     *                 example="11",
+     *                 description="Attendance status: 11=present, 12=absent, 13=late, 14=excused"
+     *             ),
+     *             @OA\Property(
+     *                 property="reason",
+     *                 type="string",
+     *                 nullable=true,
+     *                 maxLength=500,
+     *                 example="Kasallik",
+     *                 description="Reason for absence/late (optional)"
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Attendance updated successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Davomat yangilandi"),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(property="id", type="integer", example=1),
+     *                 @OA\Property(property="status", type="string", example="11"),
+     *                 @OA\Property(property="reason", type="string", nullable=true)
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Validation error",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="The status field is required")
+     *         )
+     *     ),
+     *     @OA\Response(response=404, description="Teacher profile or attendance record not found"),
+     *     @OA\Response(response=401, description="Unauthenticated"),
+     *     @OA\Response(response=403, description="Forbidden")
+     * )
      */
     public function update(Request $request, int $id): JsonResponse
     {
         $teacher = $request->user();
+        $teacherId = $teacher->employee->id ?? null;
 
+        if (!$teacherId) {
+            return $this->errorResponse('Teacher profile not found', 404);
+        }
+
+        // Validate request
         $validator = Validator::make($request->all(), [
             'status' => 'required|in:11,12,13,14',
             'reason' => 'nullable|string|max:500',
@@ -189,42 +302,112 @@ class AttendanceController extends Controller
             return $this->validationErrorResponse($validator->errors());
         }
 
-        $attendance = EAttendance::findOrFail($id);
+        try {
+            // Delegate to service
+            $result = $this->attendanceService->updateAttendance(
+                $teacherId,
+                $id,
+                $request->status,
+                $request->reason
+            );
 
-        // Verify teacher has access
-        $schedule = ESubjectSchedule::where('id', $attendance->_subject_schedule)
-            ->where('_employee', $teacher->employee->id)
-            ->first();
+            return $this->successResponse($result, 'Davomat yangilandi');
 
-        if (!$schedule) {
-            return $this->forbiddenResponse('Sizda bu davomatni o\'zgartirish huquqi yo\'q');
+        } catch (\Exception $e) {
+            return $this->forbiddenResponse($e->getMessage());
         }
-
-        $attendance->update([
-            '_attendance_type' => $request->status,
-            'reason' => $request->reason,
-        ]);
-
-        return $this->successResponse([
-            'id' => $attendance->id,
-            'status' => $attendance->_attendance_type,
-            'status_name' => $attendance->status_name,
-            'reason' => $attendance->reason,
-        ], 'Davomat yangilandi');
     }
 
     /**
      * Get attendance report for a subject
      *
-     * GET /api/v1/teacher/attendance/report
-     *
-     * @param Request $request
-     * @return JsonResponse
+     * @OA\Get(
+     *     path="/api/v1/teacher/attendance/report",
+     *     tags={"Teacher - Attendance"},
+     *     summary="Get attendance report for a subject",
+     *     description="Returns detailed attendance statistics and report for a specific subject within a date range",
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(
+     *         name="subject_id",
+     *         in="query",
+     *         description="Subject ID",
+     *         required=true,
+     *         @OA\Schema(type="integer", example=1)
+     *     ),
+     *     @OA\Parameter(
+     *         name="start_date",
+     *         in="query",
+     *         description="Start date for report",
+     *         required=true,
+     *         @OA\Schema(type="string", format="date", example="2025-01-01")
+     *     ),
+     *     @OA\Parameter(
+     *         name="end_date",
+     *         in="query",
+     *         description="End date for report (must be after or equal to start_date)",
+     *         required=true,
+     *         @OA\Schema(type="string", format="date", example="2025-01-31")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Successful response",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Davomat hisoboti"),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(property="subject_name", type="string", example="Mathematics"),
+     *                 @OA\Property(property="total_classes", type="integer", example=20),
+     *                 @OA\Property(property="total_students", type="integer", example=30),
+     *                 @OA\Property(
+     *                     property="statistics",
+     *                     type="object",
+     *                     @OA\Property(property="present_count", type="integer", example=550),
+     *                     @OA\Property(property="absent_count", type="integer", example=30),
+     *                     @OA\Property(property="late_count", type="integer", example=15),
+     *                     @OA\Property(property="excused_count", type="integer", example=5),
+     *                     @OA\Property(property="attendance_rate", type="number", format="float", example=91.67)
+     *                 ),
+     *                 @OA\Property(
+     *                     property="students",
+     *                     type="array",
+     *                     @OA\Items(
+     *                         @OA\Property(property="student_id", type="integer", example=1),
+     *                         @OA\Property(property="student_name", type="string", example="John Doe"),
+     *                         @OA\Property(property="present", type="integer", example=18),
+     *                         @OA\Property(property="absent", type="integer", example=2),
+     *                         @OA\Property(property="late", type="integer", example=0),
+     *                         @OA\Property(property="excused", type="integer", example=0),
+     *                         @OA\Property(property="percentage", type="number", example=90.0)
+     *                     )
+     *                 )
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Validation error",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="The subject_id field is required")
+     *         )
+     *     ),
+     *     @OA\Response(response=404, description="Teacher profile not found"),
+     *     @OA\Response(response=401, description="Unauthenticated"),
+     *     @OA\Response(response=403, description="Forbidden")
+     * )
      */
     public function report(Request $request): JsonResponse
     {
         $teacher = $request->user();
+        $teacherId = $teacher->employee->id ?? null;
 
+        if (!$teacherId) {
+            return $this->errorResponse('Teacher profile not found', 404);
+        }
+
+        // Validate request
         $validator = Validator::make($request->all(), [
             'subject_id' => 'required|exists:e_subject,id',
             'start_date' => 'required|date',
@@ -235,61 +418,19 @@ class AttendanceController extends Controller
             return $this->validationErrorResponse($validator->errors());
         }
 
-        // Verify teacher teaches this subject
-        $schedule = ESubjectSchedule::where('_subject', $request->subject_id)
-            ->where('_employee', $teacher->employee->id)
-            ->where('active', true)
-            ->with(['subject', 'group'])
-            ->first();
+        try {
+            // Delegate to service
+            $report = $this->attendanceService->getAttendanceReport(
+                $teacherId,
+                $request->subject_id,
+                $request->start_date,
+                $request->end_date
+            );
 
-        if (!$schedule) {
-            return $this->forbiddenResponse('Sizda bu fanga kirish huquqi yo\'q');
+            return $this->successResponse($report, 'Davomat hisoboti');
+
+        } catch (\Exception $e) {
+            return $this->forbiddenResponse($e->getMessage());
         }
-
-        // Get students
-        $students = EStudent::where('_group', $schedule->_group)
-            ->where('active', true)
-            ->get();
-
-        // Get attendance records for date range
-        $attendances = EAttendance::where('_subject_schedule', $schedule->id)
-            ->whereBetween('lesson_date', [$request->start_date, $request->end_date])
-            ->get();
-
-        // Build report
-        $totalClasses = $attendances->pluck('lesson_date')->unique()->count();
-
-        $studentReport = $students->map(function ($student) use ($attendances, $totalClasses) {
-            $studentAttendances = $attendances->where('_student', $student->id);
-
-            $present = $studentAttendances->where('_attendance_type', EAttendance::STATUS_PRESENT)->count();
-            $absent = $studentAttendances->where('_attendance_type', EAttendance::STATUS_ABSENT)->count();
-            $late = $studentAttendances->where('_attendance_type', EAttendance::STATUS_LATE)->count();
-            $excused = $studentAttendances->where('_attendance_type', EAttendance::STATUS_EXCUSED)->count();
-
-            $attendanceRate = $totalClasses > 0 ? round(($present / $totalClasses) * 100, 1) : 0;
-
-            return [
-                'student_id' => $student->student_id_number,
-                'full_name' => $student->full_name,
-                'total_classes' => $totalClasses,
-                'present' => $present,
-                'absent' => $absent,
-                'late' => $late,
-                'excused' => $excused,
-                'attendance_rate' => $attendanceRate,
-            ];
-        });
-
-        return $this->successResponse([
-            'subject' => $schedule->subject->name,
-            'group' => $schedule->group->name,
-            'period' => [
-                'start' => $request->start_date,
-                'end' => $request->end_date,
-            ],
-            'total_classes' => $totalClasses,
-            'students' => $studentReport,
-        ], 'Davomat hisoboti');
     }
 }

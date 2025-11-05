@@ -24,14 +24,75 @@ class MenuController extends Controller
     }
 
     /**
-     * Get menu for authenticated employee
-     *
-     * @route GET /api/v1/employee/menu
-     * @authenticated
+     * @OA\Get(
+     *     path="/api/v1/employee/menu",
+     *     summary="Get employee menu",
+     *     description="Retrieve role-based menu structure for the authenticated employee",
+     *     operationId="employeeMenu",
+     *     tags={"Employee - Menu"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(
+     *         name="locale",
+     *         in="query",
+     *         description="Language code for menu translations",
+     *         required=false,
+     *         @OA\Schema(type="string", example="uz", enum={"uz", "ru", "en"})
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Menu retrieved successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(
+     *                     property="menu",
+     *                     type="array",
+     *                     @OA\Items(
+     *                         type="object",
+     *                         @OA\Property(property="id", type="integer", example=1),
+     *                         @OA\Property(property="label", type="string", example="Dashboard"),
+     *                         @OA\Property(property="icon", type="string", example="dashboard"),
+     *                         @OA\Property(property="path", type="string", example="/dashboard"),
+     *                         @OA\Property(property="order", type="integer", example=1),
+     *                         @OA\Property(
+     *                             property="children",
+     *                             type="array",
+     *                             @OA\Items(
+     *                                 type="object",
+     *                                 @OA\Property(property="id", type="integer", example=2),
+     *                                 @OA\Property(property="label", type="string", example="Students"),
+     *                                 @OA\Property(property="path", type="string", example="/students")
+     *                             )
+     *                         )
+     *                     )
+     *                 )
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Unauthenticated",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Unauthorized")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="Failed to load menu",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Failed to load menu"),
+     *             @OA\Property(property="error", type="string", nullable=true, example="Service error")
+     *         )
+     *     )
+     * )
      */
     public function index(Request $request): JsonResponse
     {
-        $user = auth('admin-api')->user();
+        $user = auth('employee-api')->user();
 
         if (!$user) {
             return response()->json([
@@ -66,10 +127,42 @@ class MenuController extends Controller
     }
 
     /**
-     * Check if user can access a path
-     *
-     * @route POST /api/v1/employee/menu/check-access
-     * @authenticated
+     * @OA\Post(
+     *     path="/api/v1/employee/menu/check-access",
+     *     summary="Check menu path access",
+     *     description="Verify if the authenticated employee has access to a specific menu path",
+     *     operationId="employeeMenuCheckAccess",
+     *     tags={"Employee - Menu"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"path"},
+     *             @OA\Property(property="path", type="string", example="/students", description="Menu path to check access for")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Access check completed",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(property="path", type="string", example="/students"),
+     *                 @OA\Property(property="accessible", type="boolean", example=true)
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Unauthenticated",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Unauthorized")
+     *         )
+     *     )
+     * )
      */
     public function checkAccess(Request $request): JsonResponse
     {
@@ -99,14 +192,42 @@ class MenuController extends Controller
     }
 
     /**
-     * Invalidate menu cache for current user
-     *
-     * @route POST /api/v1/employee/menu/clear-cache
-     * @authenticated
+     * @OA\Post(
+     *     path="/api/v1/employee/menu/clear-cache",
+     *     summary="Clear all system cache",
+     *     description="Clear menu, translations, and other cached data. Similar to Yii2's /system/cache endpoint. Accessible by all authenticated users.",
+     *     operationId="employeeMenuClearCache",
+     *     tags={"Employee - Menu"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Cache cleared successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Tizim keshi tozalandi")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Unauthenticated",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Unauthorized")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="Failed to clear cache",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Failed to clear cache")
+     *         )
+     *     )
+     * )
      */
     public function clearCache(): JsonResponse
     {
-        $user = auth('admin-api')->user();
+        $user = auth('employee-api')->user();
 
         if (!$user) {
             return response()->json([
@@ -116,11 +237,20 @@ class MenuController extends Controller
         }
 
         try {
+            // Clear all application cache (like Yii2's system/cache)
+            \Illuminate\Support\Facades\Artisan::call('cache:clear');
+
+            // Also clear specific caches
             $this->menuService->invalidateUserMenuCache($user);
+
+            logger()->info('[MenuController] System cache cleared', [
+                'user_id' => $user->id,
+                'user_login' => $user->login,
+            ]);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Menu cache cleared',
+                'message' => 'Tizim keshi tozalandi',
             ]);
         } catch (\Exception $e) {
             logger()->error('[MenuController] Failed to clear cache', [
@@ -130,16 +260,53 @@ class MenuController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to clear cache',
+                'message' => 'Keshni tozalashda xatolik',
             ], 500);
         }
     }
 
     /**
-     * Get menu structure (admin only)
-     *
-     * @route GET /api/v1/employee/menu/structure
-     * @authenticated
+     * @OA\Get(
+     *     path="/api/v1/employee/menu/structure",
+     *     summary="Get menu structure",
+     *     description="Retrieve the complete menu structure (admin only)",
+     *     operationId="employeeMenuStructure",
+     *     tags={"Employee - Menu"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Menu structure retrieved successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(
+     *                     property="menu",
+     *                     type="array",
+     *                     description="Complete menu structure with all items",
+     *                     @OA\Items(type="object")
+     *                 )
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Unauthenticated",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Unauthorized")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=403,
+     *         description="Forbidden - Admin access required",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Forbidden: Admin access required")
+     *         )
+     *     )
+     * )
      */
     public function structure(): JsonResponse
     {

@@ -16,10 +16,70 @@ use Illuminate\Support\Facades\Log;
 class DashboardController extends Controller
 {
     /**
-     * Get dashboard index/stats
-     *
-     * @route GET /api/v1/employee/dashboard
-     * @authenticated
+     * @OA\Get(
+     *     path="/api/v1/employee/dashboard",
+     *     summary="Get employee dashboard",
+     *     description="Retrieve role-specific dashboard statistics and data for authenticated employee",
+     *     operationId="employeeDashboard",
+     *     tags={"Employee - Dashboard"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Dashboard data retrieved successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(property="role", type="string", example="teacher", description="User role type"),
+     *                 @OA\Property(
+     *                     property="stats",
+     *                     type="object",
+     *                     description="Role-specific statistics",
+     *                     @OA\Property(property="attendance_journals", type="integer", example=12),
+     *                     @OA\Property(property="my_lessons", type="integer", example=24),
+     *                     @OA\Property(property="training_list", type="integer", example=15),
+     *                     @OA\Property(property="midterm_exams", type="integer", example=8),
+     *                     @OA\Property(property="final_exams", type="integer", example=5),
+     *                     @OA\Property(property="other_exams", type="integer", example=3),
+     *                     @OA\Property(
+     *                         property="recent_activity",
+     *                         type="array",
+     *                         @OA\Items(
+     *                             type="object",
+     *                             @OA\Property(property="type", type="string", example="attendance"),
+     *                             @OA\Property(property="message", type="string", example="Yangi davomat jurnali kiritildi"),
+     *                             @OA\Property(property="timestamp", type="string", format="date-time", example="2024-11-05T12:00:00Z")
+     *                         )
+     *                     )
+     *                 ),
+     *                 @OA\Property(
+     *                     property="user",
+     *                     type="object",
+     *                     @OA\Property(property="name", type="string", example="John Doe"),
+     *                     @OA\Property(property="role_name", type="string", example="O'qituvchi")
+     *                 )
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Unauthenticated",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Unauthorized")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="Failed to load dashboard",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Failed to load dashboard"),
+     *             @OA\Property(property="error", type="string", nullable=true, example="Database connection error")
+     *         )
+     *     )
+     * )
      */
     public function index(Request $request): JsonResponse
     {

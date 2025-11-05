@@ -43,6 +43,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => \App\Http\Middleware\CheckPermission::class,
             'load.translations' => \App\Http\Middleware\LoadTranslations::class,
         ]);
+
+        // Configure authentication redirect to return null for API routes
+        // This prevents the "Route [login] not defined" error for API authentication
+        $middleware->redirectGuestsTo(fn ($request) => $request->is('api/*') ? null : '/login');
     })
     ->withExceptions(function (Exceptions $exceptions) {
         // Sentry Integration - Report all exceptions to Sentry

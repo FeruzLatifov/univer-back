@@ -293,10 +293,11 @@ class MenuService implements MenuServiceInterface
         try {
             // Use MultiTenantTranslationService for university-specific translations
             // This supports DB overrides while still using file-based cache
-            $translationService = app(MultiTenantTranslationService::class, [
-                'locale' => $locale,
-                'universityId' => config('app.university_id'),
-            ]);
+            // FIX: Use new instead of app() to ensure constructor parameters are passed correctly
+            $translationService = new MultiTenantTranslationService(
+                locale: $locale,
+                universityId: config('app.university_id')
+            );
 
             $translated = $translationService->trans($label, 'menu');
 

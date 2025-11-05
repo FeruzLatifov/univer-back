@@ -4,28 +4,114 @@ namespace App\Http\Controllers\Api\V1\Student;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\V1\StudentResource;
-use App\Models\EStudent;
-use App\Models\PasswordResetToken;
-use App\Models\SystemLogin;
-use App\Services\CaptchaService;
+use App\Services\Student\AuthService;
+use App\Traits\ApiResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
+use Illuminate\Http\JsonResponse;
 
 /**
  * Student Authentication Controller
  *
- * API Version: 1.0
- * Purpose: Talabalar uchun authentication (login, logout, refresh, me)
+ * MODULAR MONOLITH - Student Module
+ * HTTP LAYER ONLY - No business logic!
+ *
+ * Clean Architecture:
+ * Controller → Service → Repository → Model
+ *
+ * @package App\Http\Controllers\Api\V1\Student
  */
 class AuthController extends Controller
 {
+    use ApiResponse;
+
+    /**
+     * Auth Service (injected)
+     */
+    private AuthService $authService;
+
+    /**
+     * Constructor with dependency injection
+     */
+    public function __construct(AuthService $authService)
+    {
+        $this->authService = $authService;
+    }
+
     /**
      * Student login
      *
-     * @route POST /api/v1/student/auth/login
+     * @OA\Post(
+     *     path="/api/v1/student/auth/login",
+     *     tags={"Student - Authentication"},
+     *     summary="Student login",
+     *     description="Authenticate student with student ID and password. Returns JWT access token and student information.",
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"student_id", "password"},
+     *             @OA\Property(property="student_id", type="string", example="20210001", description="Student ID number"),
+     *             @OA\Property(property="password", type="string", format="password", example="password123", description="Student password"),
+     *             @OA\Property(property="captcha", type="string", nullable=true, example="abc123", description="Optional CAPTCHA code")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Login successful",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(
+     *                     property="user",
+     *                     type="object",
+     *                     @OA\Property(property="id", type="integer", example=123),
+     *                     @OA\Property(property="student_id", type="string", example="20210001"),
+     *                     @OA\Property(property="first_name", type="string", example="John"),
+     *                     @OA\Property(property="last_name", type="string", example="Doe"),
+     *                     @OA\Property(property="email", type="string", example="john.doe@university.edu")
+     *                 ),
+     *                 @OA\Property(property="access_token", type="string", example="eyJ0eXAiOiJKV1QiLCJhbGc..."),
+     *                 @OA\Property(property="token_type", type="string", example="Bearer"),
+     *                 @OA\Property(property="expires_in", type="integer", example=3600, description="Token expiration time in seconds")
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Authentication failed",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Invalid credentials")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=403,
+     *         description="Account inactive",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Your account status is inactive")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Validation error or CAPTCHA required",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="CAPTCHA verification required")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="Server error",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Internal server error")
+     *         )
+     *     )
+     * )
      */
-    public function login(Request $request)
+    public function login(Request $request): JsonResponse
     {
         $request->validate([
             'student_id' => 'required|string',
@@ -33,128 +119,141 @@ class AuthController extends Controller
             'captcha' => 'nullable|string',
         ]);
 
-        // CAPTCHA verification (Google reCAPTCHA v3)
-        $captchaService = app(CaptchaService::class);
-
-        if ($captchaService->isEnabled()) {
-            $captchaResult = $captchaService->verify(
-                $request->input('captcha'),
-                $request->ip(),
-                'student_login' // Action name for reCAPTCHA v3
+        try {
+            // Delegate to service
+            $result = $this->authService->attemptLogin(
+                $request->student_id,
+                $request->password,
+                $request->captcha,
+                $request->ip()
             );
 
-            if (!$captchaResult['success']) {
-                logger()->warning('Student login CAPTCHA failed', [
-                    'student_id' => $request->student_id,
-                    'ip' => $request->ip(),
-                    'score' => $captchaResult['score'] ?? 0,
-                    'error_codes' => $captchaResult['error_codes'] ?? [],
-                ]);
-
-                return response()->json([
-                    'success' => false,
-                    'message' => 'CAPTCHA verification failed. Please try again.',
-                    'captcha_error' => $captchaService->getErrorMessage($captchaResult['error_codes'] ?? []),
-                ], 422);
-            }
-
-            // Log CAPTCHA success with score
-            logger()->info('Student login CAPTCHA passed', [
-                'student_id' => $request->student_id,
-                'ip' => $request->ip(),
-                'score' => $captchaResult['score'],
+            return $this->successResponse([
+                'user' => new StudentResource($result['student']),
+                'access_token' => $result['token'],
+                'token_type' => $result['token_type'],
+                'expires_in' => $result['expires_in'],
             ]);
-        }
 
-        $student = EStudent::where('student_id_number', $request->student_id)
-            ->where('active', true)
-            ->with('meta.specialty', 'meta.group')
-            ->first();
-
-        // Check password
-        if (!$student || !Hash::check($request->password, $student->password)) {
-            // Log failed login attempt
-            SystemLogin::logFailure($request->student_id, SystemLogin::TYPE_LOGIN);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Student ID yoki parol noto\'g\'ri',
-            ], 401);
-        }
-
-        // Check student status - prevent login for expelled or dropped out students
-        $meta = $student->meta;
-        if ($meta) {
-            $blockedStatuses = ['13', '15']; // 13: Expelled, 15: Dropped out
-            if (in_array($meta->_student_status, $blockedStatuses)) {
-                $statusMessages = [
-                    '13' => 'O\'qishdan chetlashtirilgan',
-                    '15' => 'O\'qishni to\'xtatgan',
-                ];
-                $statusName = $statusMessages[$meta->_student_status] ?? 'Noma\'lum';
-
-                // Log failed login attempt (blocked status)
-                SystemLogin::logFailure($request->student_id, SystemLogin::TYPE_LOGIN);
-
-                return response()->json([
-                    'success' => false,
-                    'message' => "Sizning statusingiz: {$statusName}. Tizimga kirish mumkin emas.",
-                    'student_status' => $meta->_student_status,
-                ], 403);
+        } catch (\Exception $e) {
+            if (str_contains($e->getMessage(), 'CAPTCHA')) {
+                return $this->errorResponse($e->getMessage(), 422);
             }
+            if (str_contains($e->getMessage(), 'statusingiz')) {
+                return $this->errorResponse($e->getMessage(), 403);
+            }
+            return $this->errorResponse($e->getMessage(), 401);
         }
-
-        // Generate token with student guard
-        $token = auth('student-api')->login($student);
-
-        // Log successful login attempt
-        SystemLogin::logSuccess($request->student_id, SystemLogin::TYPE_LOGIN, $student->id);
-
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'user' => new StudentResource($student),
-                'access_token' => $token,
-                'token_type' => 'bearer',
-                'expires_in' => config('jwt.ttl') * 60,
-            ],
-        ]);
     }
 
     /**
-     * Optional 2FA: start challenge (stub if disabled)
-     * @route POST /api/v1/student/auth/2fa/challenge
+     * Optional 2FA: start challenge
+     *
+     * @OA\Post(
+     *     path="/api/v1/student/auth/2fa/challenge",
+     *     tags={"Student - Authentication"},
+     *     summary="Start 2FA challenge",
+     *     description="Initiates two-factor authentication challenge. Returns whether MFA is required and the authentication method.",
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Challenge initiated or 2FA disabled",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(property="mfa_required", type="boolean", example=true),
+     *                 @OA\Property(property="method", type="string", enum={"totp", "sms"}, example="totp", description="2FA method (only if mfa_required is true)")
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Unauthenticated",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="message", type="string", example="Unauthenticated")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="Server error",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Internal server error")
+     *         )
+     *     )
+     * )
      */
-    public function twoFAChallenge(Request $request)
+    public function twoFAChallenge(Request $request): JsonResponse
     {
-        $enabled = filter_var(env('MFA_ENABLED', false), FILTER_VALIDATE_BOOL);
-        if (!$enabled) {
-            return response()->json([
-                'success' => true,
+        if (!$this->authService->is2FAEnabled()) {
+            return $this->successResponse([
                 'mfa_required' => false,
             ]);
         }
 
         // TODO: Send TOTP/SMS code based on user preference
-        return response()->json([
-            'success' => true,
+        return $this->successResponse([
             'mfa_required' => true,
             'method' => 'totp',
         ]);
     }
 
     /**
-     * Optional 2FA: verify challenge (stub if disabled)
-     * @route POST /api/v1/student/auth/2fa/verify
+     * Optional 2FA: verify challenge
+     *
+     * @OA\Post(
+     *     path="/api/v1/student/auth/2fa/verify",
+     *     tags={"Student - Authentication"},
+     *     summary="Verify 2FA code",
+     *     description="Verifies the two-factor authentication code provided by the student",
+     *     security={{"bearerAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"code"},
+     *             @OA\Property(property="code", type="string", example="123456", description="6-digit 2FA code")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="2FA verified successfully or disabled",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="data", type="array", @OA\Items()),
+     *             @OA\Property(property="message", type="string", example="2FA verified")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Unauthenticated",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="message", type="string", example="Unauthenticated")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Validation error",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="The code field is required")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="Server error",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Internal server error")
+     *         )
+     *     )
+     * )
      */
-    public function twoFAVerify(Request $request)
+    public function twoFAVerify(Request $request): JsonResponse
     {
-        $enabled = filter_var(env('MFA_ENABLED', false), FILTER_VALIDATE_BOOL);
-        if (!$enabled) {
-            return response()->json([
-                'success' => true,
-                'message' => '2FA disabled',
-            ]);
+        if (!$this->authService->is2FAEnabled()) {
+            return $this->successResponse([], '2FA disabled');
         }
 
         $request->validate([
@@ -162,171 +261,263 @@ class AuthController extends Controller
         ]);
 
         // TODO: Verify code
-        return response()->json([
-            'success' => true,
-            'message' => '2FA verified',
-        ]);
+        return $this->successResponse([], '2FA verified');
     }
 
     /**
      * Get authenticated student info
      *
-     * @route GET /api/v1/student/auth/me
+     * @OA\Get(
+     *     path="/api/v1/student/auth/me",
+     *     tags={"Student - Authentication"},
+     *     summary="Get authenticated student information",
+     *     description="Returns the authenticated student's profile information including meta data, specialty, and group",
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Successful response",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(property="id", type="integer", example=123),
+     *                 @OA\Property(property="student_id", type="string", example="20210001"),
+     *                 @OA\Property(property="first_name", type="string", example="John"),
+     *                 @OA\Property(property="last_name", type="string", example="Doe"),
+     *                 @OA\Property(property="email", type="string", example="john.doe@university.edu"),
+     *                 @OA\Property(
+     *                     property="meta",
+     *                     type="object",
+     *                     @OA\Property(
+     *                         property="specialty",
+     *                         type="object",
+     *                         @OA\Property(property="id", type="integer", example=5),
+     *                         @OA\Property(property="name", type="string", example="Computer Science")
+     *                     ),
+     *                     @OA\Property(
+     *                         property="group",
+     *                         type="object",
+     *                         @OA\Property(property="id", type="integer", example=10),
+     *                         @OA\Property(property="name", type="string", example="CS-101")
+     *                     )
+     *                 )
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Unauthenticated",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="message", type="string", example="Unauthenticated")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Student not found",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Student topilmadi")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="Server error",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Internal server error")
+     *         )
+     *     )
+     * )
      */
-    public function me()
+    public function me(): JsonResponse
     {
         $student = auth('student-api')->user();
 
         if (!$student) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Student topilmadi',
-            ], 404);
+            return $this->errorResponse('Student topilmadi', 404);
         }
 
         $student->load('meta.specialty', 'meta.group');
 
-        return response()->json([
-            'success' => true,
-            'data' => new StudentResource($student),
-        ]);
+        return $this->successResponse(new StudentResource($student));
     }
 
     /**
      * Refresh token
      *
-     * @route POST /api/v1/student/auth/refresh
+     * @OA\Post(
+     *     path="/api/v1/student/auth/refresh",
+     *     tags={"Student - Authentication"},
+     *     summary="Refresh JWT token",
+     *     description="Refreshes the authentication token and returns a new access token",
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Token refreshed successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(property="access_token", type="string", example="eyJ0eXAiOiJKV1QiLCJhbGc..."),
+     *                 @OA\Property(property="token_type", type="string", example="Bearer"),
+     *                 @OA\Property(property="expires_in", type="integer", example=3600)
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(response=401, description="Unauthenticated or invalid token"),
+     *     @OA\Response(response=500, description="Server error")
+     * )
      */
-    public function refresh()
+    public function refresh(): JsonResponse
     {
         try {
-            $token = auth('student-api')->refresh();
+            $result = $this->authService->refreshToken();
 
-            return response()->json([
-                'success' => true,
-                'data' => [
-                    'access_token' => $token,
-                    'token_type' => 'bearer',
-                    'expires_in' => config('jwt.ttl') * 60,
-                ],
-            ]);
+            return $this->successResponse($result);
+
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Token refresh failed',
-            ], 401);
+            return $this->errorResponse($e->getMessage(), 401);
         }
     }
 
     /**
      * Logout student
      *
-     * @route POST /api/v1/student/auth/logout
+     * @OA\Post(
+     *     path="/api/v1/student/auth/logout",
+     *     tags={"Student - Authentication"},
+     *     summary="Logout student",
+     *     description="Invalidates the current JWT token and logs out the student",
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Logged out successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="data", type="array", @OA\Items()),
+     *             @OA\Property(property="message", type="string", example="Successfully logged out")
+     *         )
+     *     ),
+     *     @OA\Response(response=401, description="Unauthenticated"),
+     *     @OA\Response(response=500, description="Server error")
+     * )
      */
-    public function logout()
+    public function logout(): JsonResponse
     {
         try {
-            auth('student-api')->logout();
+            $this->authService->logout();
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Successfully logged out',
-            ]);
+            return $this->successResponse([], 'Successfully logged out');
+
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Logout failed',
-            ], 500);
+            return $this->errorResponse($e->getMessage(), 500);
         }
     }
 
     /**
      * Forgot password - send reset token
      *
-     * @route POST /api/student/auth/forgot-password
+     * @OA\Post(
+     *     path="/api/v1/student/auth/forgot-password",
+     *     tags={"Student - Authentication"},
+     *     summary="Request password reset",
+     *     description="Sends a password reset token to the student's email or phone. Requires either email or login (student ID).",
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             @OA\Property(property="email", type="string", format="email", nullable=true, example="student@university.edu", description="Student email address"),
+     *             @OA\Property(property="login", type="string", nullable=true, example="20210001", description="Student ID/login")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Reset token sent successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="data", type="object", description="Debug information (if available)"),
+     *             @OA\Property(property="message", type="string", example="Password reset token sent to your email")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Validation error or email not found",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Email or login is required")
+     *         )
+     *     ),
+     *     @OA\Response(response=500, description="Server error")
+     * )
      */
-    public function forgotPassword(Request $request)
+    public function forgotPassword(Request $request): JsonResponse
     {
         $request->validate([
             'email' => 'nullable|email',
             'login' => 'nullable|string',
         ]);
 
-        if (!$request->filled('email') && !$request->filled('login')) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Email yoki Student ID talab qilinadi',
-            ], 422);
+        try {
+            $result = $this->authService->requestPasswordReset(
+                $request->email,
+                $request->login
+            );
+
+            return $this->successResponse($result['debug'] ?? [], $result['message']);
+
+        } catch (\Exception $e) {
+            return $this->errorResponse($e->getMessage(), 422);
         }
-
-        // Find student by email or student_id_number
-        $studentQuery = EStudent::query()->where('active', true);
-        if ($request->filled('email')) {
-            $studentQuery->where('email', $request->email);
-        } elseif ($request->filled('login')) {
-            $studentQuery->where('student_id_number', $request->login);
-        }
-        $student = $studentQuery->first();
-
-        if (!$student) {
-            // Don't reveal if email exists (security best practice)
-            return response()->json([
-                'success' => true,
-                'message' => 'Agar email topilsa, parolni tiklash uchun havola yuboriladi',
-            ]);
-        }
-
-        // Delete any existing tokens for this user
-        $email = $request->email ?? $student?->email;
-        if (!$email) {
-            return response()->json([
-                'success' => true,
-                'message' => 'Agar maʼlumot topilsa, parolni tiklash uchun havola yuboriladi',
-            ]);
-        }
-
-        PasswordResetToken::deleteForUser($email, 'student');
-
-        // Generate reset token
-        $token = Str::random(64);
-        $expiresMinutes = (int) env('PASSWORD_RESET_EXPIRE_MINUTES', 60);
-
-        // Store token
-        PasswordResetToken::create([
-            'email' => $email,
-            'token' => $token,
-            'user_type' => 'student',
-            'expires_at' => now()->addMinutes($expiresMinutes),
-        ]);
-
-        // TODO: Send email with reset link containing $token
-        // For now, return token in response (ONLY for development)
-        $resetLink = config('app.frontend_url') . "/reset-password?token={$token}&email={$email}";
-
-        logger()->info('Password reset requested', [
-            'email' => $email,
-            'user_type' => 'student',
-            'token' => $token,
-            'reset_link' => $resetLink,
-        ]);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Parolni tiklash uchun havola emailingizga yuborildi',
-            // Remove these in production!
-            'debug' => app()->environment('local') ? [
-                'token' => $token,
-                'reset_link' => $resetLink,
-            ] : null,
-        ]);
     }
 
     /**
      * Reset password using token
      *
-     * @route POST /api/student/auth/reset-password
+     * @OA\Post(
+     *     path="/api/v1/student/auth/reset-password",
+     *     tags={"Student - Authentication"},
+     *     summary="Reset password with token",
+     *     description="Resets the student's password using the token received via email/SMS",
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"email", "token", "password", "password_confirmation"},
+     *             @OA\Property(property="email", type="string", format="email", example="student@university.edu", description="Student email address"),
+     *             @OA\Property(property="token", type="string", example="abc123xyz789", description="Password reset token"),
+     *             @OA\Property(property="password", type="string", format="password", minLength=6, example="newPassword123", description="New password (min 6 characters)"),
+     *             @OA\Property(property="password_confirmation", type="string", format="password", example="newPassword123", description="Password confirmation")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Password reset successful",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="data", type="array", @OA\Items()),
+     *             @OA\Property(property="message", type="string", example="Parol muvaffaqiyatli o'zgartirildi. Endi tizimga kirishingiz mumkin.")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=400,
+     *         description="Invalid token or request",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Invalid or expired token")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Validation error",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="The password field is required")
+     *         )
+     *     ),
+     *     @OA\Response(response=500, description="Server error")
+     * )
      */
-    public function resetPassword(Request $request)
+    public function resetPassword(Request $request): JsonResponse
     {
         $request->validate([
             'email' => 'required|email',
@@ -334,45 +525,20 @@ class AuthController extends Controller
             'password' => 'required|string|min:6|confirmed',
         ]);
 
-        // Find valid token
-        $resetToken = PasswordResetToken::where('email', $request->email)
-            ->where('token', $request->token)
-            ->where('user_type', 'student')
-            ->where('expires_at', '>', now())
-            ->first();
+        try {
+            $this->authService->resetPassword(
+                $request->email,
+                $request->token,
+                $request->password
+            );
 
-        if (!$resetToken) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Token noto\'g\'ri yoki muddati tugagan',
-            ], 400);
+            return $this->successResponse(
+                [],
+                'Parol muvaffaqiyatli o\'zgartirildi. Endi tizimga kirishingiz mumkin.'
+            );
+
+        } catch (\Exception $e) {
+            return $this->errorResponse($e->getMessage(), 400);
         }
-
-        // Find student
-        $student = EStudent::where('email', $request->email)
-            ->where('active', true)
-            ->first();
-
-        if (!$student) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Foydalanuvchi topilmadi',
-            ], 404);
-        }
-
-        // Update password
-        $student->password = Hash::make($request->password);
-        $student->save();
-
-        // Delete used token and any other tokens for this user
-        PasswordResetToken::deleteForUser($request->email, 'student');
-
-        // Clean up expired tokens
-        PasswordResetToken::deleteExpired();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Parol muvaffaqiyatli o\'zgartirildi. Endi tizimga kirishingiz mumkin.',
-        ]);
     }
 }

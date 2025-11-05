@@ -120,6 +120,10 @@ Route::middleware('throttle:auth')->prefix('v1/employee/auth')->group(function (
         Route::post('/refresh', [\App\Http\Controllers\Api\V1\Employee\AuthController::class, 'refresh']);
         Route::get('/me', [\App\Http\Controllers\Api\V1\Employee\AuthController::class, 'me']);
         Route::post('/role/switch', [\App\Http\Controllers\Api\V1\Employee\AuthController::class, 'switchRole']);
+
+        // ZERO TRUST: Permission endpoints (F12-proof)
+        Route::get('/permissions', [\App\Http\Controllers\Api\V1\Employee\AuthController::class, 'getPermissions']);
+        Route::post('/permissions/check', [\App\Http\Controllers\Api\V1\Employee\AuthController::class, 'checkPermissions']);
     });
 });
 
@@ -136,9 +140,14 @@ Route::middleware(['auth:employee-api', 'throttle:api'])->prefix('v1/employee')-
 
     // Document Signing
     Route::prefix('documents')->group(function () {
+        // List documents to sign
         Route::get('/sign', [\App\Http\Controllers\Api\V1\Employee\DocumentController::class, 'index']);
-        Route::get('/stats', [\App\Http\Controllers\Api\V1\Employee\DocumentController::class, 'stats']);
-        Route::get('/{id}', [\App\Http\Controllers\Api\V1\Employee\DocumentController::class, 'show']);
+        // Document details for viewing
+        Route::get('/{hash}/view', [\App\Http\Controllers\Api\V1\Employee\DocumentController::class, 'view']);
+        // Initiate sign action
+        Route::post('/{hash}/sign', [\App\Http\Controllers\Api\V1\Employee\DocumentController::class, 'sign']);
+        // Get sign status
+        Route::get('/{hash}/status', [\App\Http\Controllers\Api\V1\Employee\DocumentController::class, 'status']);
     });
 });
 
@@ -158,6 +167,7 @@ Route::middleware(['auth:employee-api', 'throttle:api'])->prefix('v1/teacher')->
     // Schedule & Timetable
     Route::prefix('schedule')->group(function () {
         Route::get('/', [\App\Http\Controllers\Api\V1\Teacher\ScheduleController::class, 'index']);
+        Route::get('/today', [\App\Http\Controllers\Api\V1\Teacher\ScheduleController::class, 'today']);
         Route::get('/day/{day}', [\App\Http\Controllers\Api\V1\Teacher\ScheduleController::class, 'day']);
         Route::get('/workload', [\App\Http\Controllers\Api\V1\Teacher\ScheduleController::class, 'workload']);
     });
@@ -261,24 +271,24 @@ Route::middleware(['auth:admin-api', 'throttle:students'])->group(function () {
     Route::prefix('students')->group(function () {
         // View permissions
         Route::middleware('permission:student.view')->group(function () {
-            Route::get('/', [\App\Http\Controllers\Api\StudentController::class, 'index']);
-            Route::get('/{student}', [\App\Http\Controllers\Api\StudentController::class, 'show']);
+            Route::get('/', [\App\Http\Controllers\Api\V1\Admin\StudentController::class, 'index']);
+            Route::get('/{student}', [\App\Http\Controllers\Api\V1\Admin\StudentController::class, 'show']);
         });
 
         // Create permission
         Route::middleware('permission:student.create')->group(function () {
-            Route::post('/', [\App\Http\Controllers\Api\StudentController::class, 'store']);
-            Route::post('/{student}/upload-image', [\App\Http\Controllers\Api\StudentController::class, 'uploadImage']);
+            Route::post('/', [\App\Http\Controllers\Api\V1\Admin\StudentController::class, 'store']);
+            Route::post('/{student}/upload-image', [\App\Http\Controllers\Api\V1\Admin\StudentController::class, 'uploadImage']);
         });
 
         // Edit permission
         Route::middleware('permission:student.edit')->group(function () {
-            Route::put('/{student}', [\App\Http\Controllers\Api\StudentController::class, 'update']);
+            Route::put('/{student}', [\App\Http\Controllers\Api\V1\Admin\StudentController::class, 'update']);
         });
 
         // Delete permission
         Route::middleware('permission:student.delete')->group(function () {
-            Route::delete('/{student}', [\App\Http\Controllers\Api\StudentController::class, 'destroy']);
+            Route::delete('/{student}', [\App\Http\Controllers\Api\V1\Admin\StudentController::class, 'destroy']);
         });
     });
 
@@ -287,20 +297,20 @@ Route::middleware(['auth:admin-api', 'throttle:students'])->group(function () {
     // ============================================
     Route::prefix('groups')->group(function () {
         Route::middleware('permission:group.view')->group(function () {
-            Route::get('/', [\App\Http\Controllers\Api\GroupController::class, 'index']);
-            Route::get('/{group}', [\App\Http\Controllers\Api\GroupController::class, 'show']);
+            Route::get('/', [\App\Http\Controllers\Api\V1\Admin\GroupController::class, 'index']);
+            Route::get('/{group}', [\App\Http\Controllers\Api\V1\Admin\GroupController::class, 'show']);
         });
 
         Route::middleware('permission:group.create')->group(function () {
-            Route::post('/', [\App\Http\Controllers\Api\GroupController::class, 'store']);
+            Route::post('/', [\App\Http\Controllers\Api\V1\Admin\GroupController::class, 'store']);
         });
 
         Route::middleware('permission:group.edit')->group(function () {
-            Route::put('/{group}', [\App\Http\Controllers\Api\GroupController::class, 'update']);
+            Route::put('/{group}', [\App\Http\Controllers\Api\V1\Admin\GroupController::class, 'update']);
         });
 
         Route::middleware('permission:group.delete')->group(function () {
-            Route::delete('/{group}', [\App\Http\Controllers\Api\GroupController::class, 'destroy']);
+            Route::delete('/{group}', [\App\Http\Controllers\Api\V1\Admin\GroupController::class, 'destroy']);
         });
     });
 
@@ -309,20 +319,20 @@ Route::middleware(['auth:admin-api', 'throttle:students'])->group(function () {
     // ============================================
     Route::prefix('specialties')->group(function () {
         Route::middleware('permission:specialty.view')->group(function () {
-            Route::get('/', [\App\Http\Controllers\Api\SpecialtyController::class, 'index']);
-            Route::get('/{specialty}', [\App\Http\Controllers\Api\SpecialtyController::class, 'show']);
+            Route::get('/', [\App\Http\Controllers\Api\V1\Admin\SpecialtyController::class, 'index']);
+            Route::get('/{specialty}', [\App\Http\Controllers\Api\V1\Admin\SpecialtyController::class, 'show']);
         });
 
         Route::middleware('permission:specialty.create')->group(function () {
-            Route::post('/', [\App\Http\Controllers\Api\SpecialtyController::class, 'store']);
+            Route::post('/', [\App\Http\Controllers\Api\V1\Admin\SpecialtyController::class, 'store']);
         });
 
         Route::middleware('permission:specialty.edit')->group(function () {
-            Route::put('/{specialty}', [\App\Http\Controllers\Api\SpecialtyController::class, 'update']);
+            Route::put('/{specialty}', [\App\Http\Controllers\Api\V1\Admin\SpecialtyController::class, 'update']);
         });
 
         Route::middleware('permission:specialty.delete')->group(function () {
-            Route::delete('/{specialty}', [\App\Http\Controllers\Api\SpecialtyController::class, 'destroy']);
+            Route::delete('/{specialty}', [\App\Http\Controllers\Api\V1\Admin\SpecialtyController::class, 'destroy']);
         });
     });
 
@@ -331,20 +341,20 @@ Route::middleware(['auth:admin-api', 'throttle:students'])->group(function () {
     // ============================================
     Route::prefix('departments')->group(function () {
         Route::middleware('permission:department.view')->group(function () {
-            Route::get('/', [\App\Http\Controllers\Api\DepartmentController::class, 'index']);
-            Route::get('/{department}', [\App\Http\Controllers\Api\DepartmentController::class, 'show']);
+            Route::get('/', [\App\Http\Controllers\Api\V1\Admin\DepartmentController::class, 'index']);
+            Route::get('/{department}', [\App\Http\Controllers\Api\V1\Admin\DepartmentController::class, 'show']);
         });
 
         Route::middleware('permission:department.create')->group(function () {
-            Route::post('/', [\App\Http\Controllers\Api\DepartmentController::class, 'store']);
+            Route::post('/', [\App\Http\Controllers\Api\V1\Admin\DepartmentController::class, 'store']);
         });
 
         Route::middleware('permission:department.edit')->group(function () {
-            Route::put('/{department}', [\App\Http\Controllers\Api\DepartmentController::class, 'update']);
+            Route::put('/{department}', [\App\Http\Controllers\Api\V1\Admin\DepartmentController::class, 'update']);
         });
 
         Route::middleware('permission:department.delete')->group(function () {
-            Route::delete('/{department}', [\App\Http\Controllers\Api\DepartmentController::class, 'destroy']);
+            Route::delete('/{department}', [\App\Http\Controllers\Api\V1\Admin\DepartmentController::class, 'destroy']);
         });
     });
 
@@ -353,20 +363,20 @@ Route::middleware(['auth:admin-api', 'throttle:students'])->group(function () {
     // ============================================
     Route::prefix('employees')->group(function () {
         Route::middleware('permission:employee.view')->group(function () {
-            Route::get('/', [\App\Http\Controllers\Api\EmployeeController::class, 'index']);
-            Route::get('/{employee}', [\App\Http\Controllers\Api\EmployeeController::class, 'show']);
+            Route::get('/', [\App\Http\Controllers\Api\V1\Admin\EmployeeController::class, 'index']);
+            Route::get('/{employee}', [\App\Http\Controllers\Api\V1\Admin\EmployeeController::class, 'show']);
         });
 
         Route::middleware('permission:employee.create')->group(function () {
-            Route::post('/', [\App\Http\Controllers\Api\EmployeeController::class, 'store']);
+            Route::post('/', [\App\Http\Controllers\Api\V1\Admin\EmployeeController::class, 'store']);
         });
 
         Route::middleware('permission:employee.edit')->group(function () {
-            Route::put('/{employee}', [\App\Http\Controllers\Api\EmployeeController::class, 'update']);
+            Route::put('/{employee}', [\App\Http\Controllers\Api\V1\Admin\EmployeeController::class, 'update']);
         });
 
         Route::middleware('permission:employee.delete')->group(function () {
-            Route::delete('/{employee}', [\App\Http\Controllers\Api\EmployeeController::class, 'destroy']);
+            Route::delete('/{employee}', [\App\Http\Controllers\Api\V1\Admin\EmployeeController::class, 'destroy']);
         });
     });
 
@@ -374,10 +384,10 @@ Route::middleware(['auth:admin-api', 'throttle:students'])->group(function () {
     // HEMIS INTEGRATION ROUTES (Admin only)
     // ============================================
     Route::prefix('hemis')->middleware(['throttle:10,1', 'permission:hemis.sync'])->group(function () {
-        Route::get('/check', [\App\Http\Controllers\Api\HemisController::class, 'checkConnection']);
-        Route::post('/sync/students', [\App\Http\Controllers\Api\HemisController::class, 'syncStudents']);
-        Route::post('/push/student/{studentId}', [\App\Http\Controllers\Api\HemisController::class, 'pushStudent']);
-        Route::get('/sync/status', [\App\Http\Controllers\Api\HemisController::class, 'getSyncStatus']);
+        Route::get('/check', [\App\Http\Controllers\Api\V1\Admin\HemisController::class, 'checkConnection']);
+        Route::post('/sync/students', [\App\Http\Controllers\Api\V1\Admin\HemisController::class, 'syncStudents']);
+        Route::post('/push/student/{studentId}', [\App\Http\Controllers\Api\V1\Admin\HemisController::class, 'pushStudent']);
+        Route::get('/sync/status', [\App\Http\Controllers\Api\V1\Admin\HemisController::class, 'getSyncStatus']);
     });
 });
 

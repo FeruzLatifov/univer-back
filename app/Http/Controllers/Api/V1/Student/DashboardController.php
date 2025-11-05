@@ -3,196 +3,141 @@
 namespace App\Http\Controllers\Api\V1\Student;
 
 use App\Http\Controllers\Controller;
+use App\Services\Student\DashboardService;
+use App\Traits\ApiResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use App\Models\EStudent;
-use App\Models\EAssignment;
-use App\Models\ESubjectTest;
-use App\Models\EAttendance;
-use App\Models\EGrade;
-use App\Models\ECurriculumSubject;
+use Illuminate\Http\JsonResponse;
 
+/**
+ * Student Dashboard Controller
+ *
+ * MODULAR MONOLITH - Student Module
+ * HTTP LAYER ONLY - No business logic!
+ *
+ * Clean Architecture:
+ * Controller → Service → Repository → Model
+ *
+ * @package App\Http\Controllers\Api\V1\Student
+ */
 class DashboardController extends Controller
 {
+    use ApiResponse;
+
     /**
-     * Get student dashboard data
+     * Dashboard Service (injected)
      */
-    public function index(Request $request)
+    private DashboardService $dashboardService;
+
+    /**
+     * Constructor with dependency injection
+     */
+    public function __construct(DashboardService $dashboardService)
     {
-        $student = $request->user();
-
-        // Get active subjects (current semester)
-        $activeSubjects = ECurriculumSubject::where('curriculum_id', $student->_curriculum)
-            ->where('semester', $student->_semestr ?? 1)
-            ->with(['subject'])
-            ->get()
-            ->map(function ($cs) {
-                return [
-                    'id' => $cs->_subject,
-                    'name' => $cs->subject->name ?? 'N/A',
-                    'code' => $cs->subject->code ?? '',
-                    'credit' => $cs->credit,
-                    'total_acload' => $cs->total_acload,
-                ];
-            });
-
-        // Upcoming assignments (next 7 days)
-        $upcomingAssignments = EAssignment::whereHas('subject.curriculumSubjects', function ($query) use ($student) {
-                $query->where('curriculum_id', $student->_curriculum);
-            })
-            ->where('status', 'published')
-            ->where('deadline', '>=', now())
-            ->where('deadline', '<=', now()->addDays(7))
-            ->with(['subject'])
-            ->orderBy('deadline', 'asc')
-            ->limit(5)
-            ->get()
-            ->map(function ($assignment) use ($student) {
-                // Check if student has submitted
-                $submission = $assignment->submissions()
-                    ->where('_student', $student->id)
-                    ->first();
-
-                return [
-                    'id' => $assignment->id,
-                    'title' => $assignment->title,
-                    'subject' => $assignment->subject->name ?? 'N/A',
-                    'deadline' => $assignment->deadline,
-                    'status' => $submission ? 'submitted' : 'pending',
-                    'grade' => $submission->grade ?? null,
-                ];
-            });
-
-        // Available tests
-        $availableTests = ESubjectTest::whereHas('subject.curriculumSubjects', function ($query) use ($student) {
-                $query->where('curriculum_id', $student->_curriculum);
-            })
-            ->where('status', 'published')
-            ->where('start_time', '<=', now())
-            ->where('end_time', '>=', now())
-            ->with(['subject'])
-            ->limit(5)
-            ->get()
-            ->map(function ($test) use ($student) {
-                // Check attempts
-                $attemptsCount = $test->attempts()
-                    ->where('_student', $student->id)
-                    ->count();
-
-                $bestAttempt = $test->attempts()
-                    ->where('_student', $student->id)
-                    ->orderBy('score', 'desc')
-                    ->first();
-
-                return [
-                    'id' => $test->id,
-                    'title' => $test->title,
-                    'subject' => $test->subject->name ?? 'N/A',
-                    'duration' => $test->duration,
-                    'end_time' => $test->end_time,
-                    'attempts_count' => $attemptsCount,
-                    'max_attempts' => $test->max_attempts,
-                    'best_score' => $bestAttempt->score ?? null,
-                ];
-            });
-
-        // Attendance statistics (current month)
-        $attendanceStats = EAttendance::where('_student', $student->id)
-            ->whereMonth('_date', now()->month)
-            ->whereYear('_date', now()->year)
-            ->select('_attendance_type', DB::raw('count(*) as count'))
-            ->groupBy('_attendance_type')
-            ->get()
-            ->pluck('count', '_attendance_type')
-            ->toArray();
-
-        $totalClasses = array_sum($attendanceStats);
-        $presentCount = ($attendanceStats['present'] ?? 0) + ($attendanceStats['late'] ?? 0);
-        $attendanceRate = $totalClasses > 0 ? round(($presentCount / $totalClasses) * 100, 1) : 0;
-
-        // Grade statistics
-        $grades = EGrade::where('_student', $student->id)
-            ->where('_semester', $student->_semestr ?? 1)
-            ->get();
-
-        $totalGrades = $grades->count();
-        $avgGrade = $grades->avg('total_point');
-        $gpa = $totalGrades > 0 ? round($avgGrade / 20, 2) : 0; // Assuming 100 point system
-
-        // Recent grades
-        $recentGrades = $grades->sortByDesc('updated_at')
-            ->take(5)
-            ->map(function ($grade) {
-                return [
-                    'id' => $grade->id,
-                    'subject' => $grade->subject->name ?? 'N/A',
-                    'midterm' => $grade->midterm_point,
-                    'final' => $grade->final_point,
-                    'total' => $grade->total_point,
-                    'grade_letter' => $this->getGradeLetter($grade->total_point),
-                ];
-            })
-            ->values();
-
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'student' => [
-                    'id' => $student->id,
-                    'name' => $student->full_name,
-                    'group' => $student->group->name ?? 'N/A',
-                    'course' => $student->_level ?? 1,
-                    'semester' => $student->_semestr ?? 1,
-                ],
-                'subjects' => [
-                    'active' => $activeSubjects,
-                    'total' => $activeSubjects->count(),
-                ],
-                'assignments' => [
-                    'upcoming' => $upcomingAssignments,
-                    'total' => $upcomingAssignments->count(),
-                ],
-                'tests' => [
-                    'available' => $availableTests,
-                    'total' => $availableTests->count(),
-                ],
-                'attendance' => [
-                    'stats' => [
-                        'present' => $attendanceStats['present'] ?? 0,
-                        'absent' => $attendanceStats['absent'] ?? 0,
-                        'late' => $attendanceStats['late'] ?? 0,
-                        'excused' => $attendanceStats['excused'] ?? 0,
-                        'total' => $totalClasses,
-                        'rate' => $attendanceRate,
-                    ],
-                ],
-                'grades' => [
-                    'recent' => $recentGrades,
-                    'statistics' => [
-                        'total' => $totalGrades,
-                        'average' => round($avgGrade, 1),
-                        'gpa' => $gpa,
-                    ],
-                ],
-            ],
-        ]);
+        $this->dashboardService = $dashboardService;
     }
 
     /**
-     * Get grade letter from points
+     * Get student dashboard data
+     *
+     * @OA\Get(
+     *     path="/api/v1/student/dashboard",
+     *     tags={"Student - Dashboard"},
+     *     summary="Get student dashboard data",
+     *     description="Returns comprehensive dashboard data including upcoming assignments, attendance summary, grade statistics, schedule, and announcements",
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Successful response",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(
+     *                     property="upcoming_assignments",
+     *                     type="array",
+     *                     description="List of upcoming assignments",
+     *                     @OA\Items(
+     *                         @OA\Property(property="id", type="integer", example=1),
+     *                         @OA\Property(property="title", type="string", example="Homework 1"),
+     *                         @OA\Property(property="subject", type="string", example="Mathematics"),
+     *                         @OA\Property(property="deadline", type="string", format="date-time", example="2025-11-15 23:59:00")
+     *                     )
+     *                 ),
+     *                 @OA\Property(
+     *                     property="attendance_summary",
+     *                     type="object",
+     *                     @OA\Property(property="present", type="integer", example=120),
+     *                     @OA\Property(property="absent", type="integer", example=10),
+     *                     @OA\Property(property="rate", type="number", example=92.3)
+     *                 ),
+     *                 @OA\Property(
+     *                     property="grade_statistics",
+     *                     type="object",
+     *                     @OA\Property(property="gpa", type="number", example=3.85),
+     *                     @OA\Property(property="total_subjects", type="integer", example=8),
+     *                     @OA\Property(property="average_score", type="number", example=85.5)
+     *                 ),
+     *                 @OA\Property(
+     *                     property="today_schedule",
+     *                     type="array",
+     *                     description="Today's class schedule",
+     *                     @OA\Items(
+     *                         @OA\Property(property="subject", type="string", example="Physics"),
+     *                         @OA\Property(property="time", type="string", example="09:00-10:30"),
+     *                         @OA\Property(property="room", type="string", example="Room 201")
+     *                     )
+     *                 ),
+     *                 @OA\Property(
+     *                     property="announcements",
+     *                     type="array",
+     *                     description="Recent announcements",
+     *                     @OA\Items(
+     *                         @OA\Property(property="id", type="integer", example=5),
+     *                         @OA\Property(property="title", type="string", example="Exam Schedule"),
+     *                         @OA\Property(property="date", type="string", format="date", example="2025-11-05")
+     *                     )
+     *                 )
+     *             ),
+     *             @OA\Property(property="message", type="string", example="Student dashboard")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Unauthenticated",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="message", type="string", example="Unauthenticated")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Student not found",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Student not found")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="Server error",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Internal server error")
+     *         )
+     *     )
+     * )
      */
-    private function getGradeLetter($points)
+    public function index(Request $request): JsonResponse
     {
-        if ($points >= 90) return 'A';
-        if ($points >= 85) return 'A-';
-        if ($points >= 80) return 'B+';
-        if ($points >= 75) return 'B';
-        if ($points >= 70) return 'B-';
-        if ($points >= 65) return 'C+';
-        if ($points >= 60) return 'C';
-        if ($points >= 55) return 'C-';
-        if ($points >= 50) return 'D+';
-        if ($points >= 45) return 'D';
-        return 'F';
+        $student = $request->user();
+
+        if (!$student) {
+            return $this->errorResponse('Student not found', 404);
+        }
+
+        // Delegate to service
+        $dashboardData = $this->dashboardService->getDashboardData($student);
+
+        return $this->successResponse($dashboardData, 'Student dashboard');
     }
 }

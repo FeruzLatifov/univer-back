@@ -51,16 +51,16 @@ return array (
         ),
       ),
     ),
-    'document' => 
+    'document' =>
     array (
       'icon' => 'folder-open',
       'label' => 'E-Documents',
       'url' => '/document/sign-documents',
-      'permission' => 'document.view',
+      'permission' => 'document/sign-documents',
       'order' => 2,
-      'items' => 
+      'items' =>
       array (
-        'document/sign-documents' => 
+        'document/sign-documents' =>
         array (
           'label' => 'Document Sign Documents',
           'url' => '/document/sign-documents',

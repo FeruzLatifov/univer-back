@@ -20,20 +20,20 @@ Route::get('/docs', function () {
     return redirect('/docs/api');
 });
 
-// Main API Documentation - Shows complete master spec
+// Main API Documentation - Shows complete API spec
 Route::get('/docs/api', function () {
-    $yamlPath = storage_path('api-docs/master-api.yaml');
+    $jsonPath = storage_path('api-docs/api-docs.json');
 
-    if (!file_exists($yamlPath)) {
+    if (!file_exists($jsonPath)) {
         return response()->json([
             'error' => 'Documentation not found',
-            'message' => 'Master API documentation is not available. Run: php artisan docs:generate --all',
+            'message' => 'API documentation is not available.',
         ], 404);
     }
 
     return view('swagger.index', [
         'role' => 'api',
-        'title' => 'HEMIS University - API Documentation',
+        'title' => 'HEMIS University - Complete API Documentation',
         'yamlUrl' => url('/docs/api/spec'),
     ]);
 })->name('docs.api');
@@ -63,16 +63,16 @@ Route::get('/docs/{role}', function ($role) {
     ]);
 });
 
-// Serve main API spec file (master)
+// Serve main API spec file (JSON)
 Route::get('/docs/api/spec', function () {
-    $yamlPath = storage_path('api-docs/master-api.yaml');
+    $jsonPath = storage_path('api-docs/api-docs.json');
 
-    if (!file_exists($yamlPath)) {
-        abort(404, 'Master API documentation not found. Run: php artisan docs:generate --all');
+    if (!file_exists($jsonPath)) {
+        abort(404, 'API documentation not found.');
     }
 
-    return response()->file($yamlPath, [
-        'Content-Type' => 'application/x-yaml',
+    return response()->file($jsonPath, [
+        'Content-Type' => 'application/json',
         'Content-Disposition' => 'inline',
     ]);
 });

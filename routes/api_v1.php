@@ -11,7 +11,6 @@ use App\Http\Controllers\Api\V1\Admin\SpecialtyController;
 use App\Http\Controllers\Api\V1\Admin\DepartmentController;
 use App\Http\Controllers\Api\V1\Admin\EmployeeController;
 use App\Http\Controllers\Api\V1\Admin\HemisController;
-use App\Http\Controllers\Api\V1\Admin\StaffController as AdminStaffController;
 use App\Http\Controllers\Api\V1\Teacher\SubjectController as TeacherSubjectController;
 use App\Http\Controllers\Api\V1\Teacher\ScheduleController as TeacherScheduleController;
 use App\Http\Controllers\Api\V1\Teacher\AttendanceController as TeacherAttendanceController;
@@ -73,9 +72,10 @@ Route::prefix('employee')->group(function () {
 
     // Protected Employee Routes (Self-Service Portal)
     Route::middleware('auth:employee-api')->group(function () {
-        Route::get('/profile', [AdminStaffController::class, 'myProfile']);
-        Route::put('/profile', [AdminStaffController::class, 'updateProfile']);
-        Route::post('/profile/avatar', [AdminStaffController::class, 'uploadAvatar']);
+        // TODO: Implement Employee\ProfileController for employee self-service
+        // Route::get('/profile', [EmployeeProfileController::class, 'show']);
+        // Route::put('/profile', [EmployeeProfileController::class, 'update']);
+        // Route::post('/profile/avatar', [EmployeeProfileController::class, 'uploadAvatar']);
 
         // Teacher Load
         Route::prefix('teacher-load')->group(function () {
@@ -89,7 +89,7 @@ Route::prefix('employee')->group(function () {
             Route::get('/sign', [EmployeeDocumentController::class, 'index']);
             Route::get('/{hash}/view', [EmployeeDocumentController::class, 'view']);
             Route::post('/{hash}/sign', [EmployeeDocumentController::class, 'sign']);
-            Route::post('/{hash}/status', [EmployeeDocumentController::class, 'status']);
+            Route::get('/{hash}/status', [EmployeeDocumentController::class, 'status']);
         });
     });
 });

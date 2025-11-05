@@ -25,9 +25,63 @@ use Illuminate\Support\Str;
 class AuthController extends Controller
 {
     /**
-     * Employee login
-     *
-     * @route POST /api/v1/employee/auth/login
+     * @OA\Post(
+     *     path="/api/v1/employee/auth/login",
+     *     summary="Employee login",
+     *     description="Authenticate employee (admin, teacher, staff) and return JWT token",
+     *     operationId="employeeLogin",
+     *     tags={"Employee - Authentication"},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         description="Employee login credentials",
+     *         @OA\JsonContent(
+     *             required={"login", "password"},
+     *             @OA\Property(property="login", type="string", example="teacher001", description="Employee login or employee ID number"),
+     *             @OA\Property(property="password", type="string", format="password", example="password123", description="Employee password"),
+     *             @OA\Property(property="captcha", type="string", example="03AGdBq26...", description="Google reCAPTCHA v3 token (optional)")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Login successful",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(property="user", ref="#/components/schemas/AdminResource"),
+     *                 @OA\Property(property="access_token", type="string", example="eyJ0eXAiOiJKV1QiLCJhbGc..."),
+     *                 @OA\Property(property="token_type", type="string", example="bearer"),
+     *                 @OA\Property(property="expires_in", type="integer", example=3600)
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Invalid credentials",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Login yoki parol noto'g'ri")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=403,
+     *         description="Employee inactive or not linked",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Employee is not active. Please contact an administrator.")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="CAPTCHA verification failed",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="CAPTCHA verification failed. Please try again."),
+     *             @OA\Property(property="captcha_error", type="string", example="Invalid CAPTCHA token")
+     *         )
+     *     )
+     * )
      */
     public function login(Request $request)
     {
@@ -216,8 +270,28 @@ class AuthController extends Controller
     }
 
     /**
-     * Optional 2FA: start challenge (stub if disabled)
-     * @route POST /api/v1/employee/auth/2fa/challenge
+     * @OA\Post(
+     *     path="/api/v1/employee/auth/2fa/challenge",
+     *     summary="Start 2FA challenge",
+     *     description="Initiate two-factor authentication challenge (TOTP/SMS)",
+     *     operationId="employee2FAChallenge",
+     *     tags={"Employee - Authentication"},
+     *     @OA\RequestBody(
+     *         required=false,
+     *         @OA\JsonContent(
+     *             @OA\Property(property="user_id", type="integer", example=123, description="User ID for 2FA challenge")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="2FA challenge initiated or not required",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="mfa_required", type="boolean", example=false),
+     *             @OA\Property(property="method", type="string", example="totp", description="MFA method (totp or sms)")
+     *         )
+     *     )
+     * )
      */
     public function twoFAChallenge(Request $request)
     {
@@ -238,8 +312,28 @@ class AuthController extends Controller
     }
 
     /**
-     * Optional 2FA: verify challenge (stub if disabled)
-     * @route POST /api/v1/employee/auth/2fa/verify
+     * @OA\Post(
+     *     path="/api/v1/employee/auth/2fa/verify",
+     *     summary="Verify 2FA code",
+     *     description="Verify two-factor authentication code (TOTP/SMS)",
+     *     operationId="employee2FAVerify",
+     *     tags={"Employee - Authentication"},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"code"},
+     *             @OA\Property(property="code", type="string", example="123456", description="6-digit verification code")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="2FA verified successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="2FA verified")
+     *         )
+     *     )
+     * )
      */
     public function twoFAVerify(Request $request)
     {
@@ -263,9 +357,38 @@ class AuthController extends Controller
     }
 
     /**
-     * Get authenticated employee info
-     *
-     * @route GET /api/v1/employee/auth/me
+     * @OA\Get(
+     *     path="/api/v1/employee/auth/me",
+     *     summary="Get authenticated employee profile",
+     *     description="Returns the authenticated employee's profile information",
+     *     operationId="employeeMe",
+     *     tags={"Employee - Authentication"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Employee profile retrieved successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="data", ref="#/components/schemas/AdminResource")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Unauthenticated",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Unauthenticated")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Employee not found",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Employee topilmadi")
+     *         )
+     *     )
+     * )
      */
     public function me()
     {
@@ -314,9 +437,36 @@ class AuthController extends Controller
     }
 
     /**
-     * Refresh token
-     *
-     * @route POST /api/v1/employee/auth/refresh
+     * @OA\Post(
+     *     path="/api/v1/employee/auth/refresh",
+     *     summary="Refresh JWT token",
+     *     description="Refresh the authentication token to extend session",
+     *     operationId="employeeRefreshToken",
+     *     tags={"Employee - Authentication"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Token refreshed successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(property="access_token", type="string", example="eyJ0eXAiOiJKV1QiLCJhbGc..."),
+     *                 @OA\Property(property="token_type", type="string", example="bearer"),
+     *                 @OA\Property(property="expires_in", type="integer", example=3600)
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Token refresh failed",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Token refresh failed")
+     *         )
+     *     )
+     * )
      */
     public function refresh()
     {
@@ -340,9 +490,30 @@ class AuthController extends Controller
     }
 
     /**
-     * Logout employee
-     *
-     * @route POST /api/v1/employee/auth/logout
+     * @OA\Post(
+     *     path="/api/v1/employee/auth/logout",
+     *     summary="Logout employee",
+     *     description="Invalidate the current JWT token and logout the employee",
+     *     operationId="employeeLogout",
+     *     tags={"Employee - Authentication"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Logout successful",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Successfully logged out")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="Logout failed",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Logout failed")
+     *         )
+     *     )
+     * )
      */
     public function logout()
     {
@@ -362,8 +533,61 @@ class AuthController extends Controller
     }
 
     /**
-     * Switch active role for the authenticated employee
-     * @route POST /api/v1/employee/auth/role/switch
+     * @OA\Post(
+     *     path="/api/v1/employee/auth/role/switch",
+     *     summary="Switch employee role",
+     *     description="Switch the active role for an employee with multiple roles",
+     *     operationId="employeeSwitchRole",
+     *     tags={"Employee - Authentication"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"role"},
+     *             @OA\Property(property="role", type="integer", example=2, description="Role ID to switch to")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Role switched successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="'O'qituvchi' roliga o'tildi"),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(property="user", ref="#/components/schemas/AdminResource"),
+     *                 @OA\Property(property="access_token", type="string", example="eyJ0eXAiOiJKV1QiLCJhbGc..."),
+     *                 @OA\Property(property="token_type", type="string", example="bearer"),
+     *                 @OA\Property(property="expires_in", type="integer", example=3600)
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Unauthenticated",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Staff topilmadi")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=403,
+     *         description="Role not assigned to user",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Sizda 'O'qituvchi' roli mavjud emas")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Role not found",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Rol topilmadi")
+     *         )
+     *     )
+     * )
      */
     public function switchRole(Request $request)
     {
@@ -425,9 +649,44 @@ class AuthController extends Controller
     }
 
     /**
-     * Forgot password - send reset token
-     *
-     * @route POST /api/admin/auth/forgot-password
+     * @OA\Post(
+     *     path="/api/v1/employee/auth/forgot-password",
+     *     summary="Request password reset",
+     *     description="Send password reset token to employee's email",
+     *     operationId="employeeForgotPassword",
+     *     tags={"Employee - Authentication"},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             @OA\Property(property="email", type="string", format="email", example="teacher@university.uz", description="Employee email address"),
+     *             @OA\Property(property="login", type="string", example="teacher001", description="Employee login (alternative to email)")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Password reset email sent (or generic success message)",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Parolni tiklash uchun havola emailingizga yuborildi"),
+     *             @OA\Property(
+     *                 property="debug",
+     *                 type="object",
+     *                 nullable=true,
+     *                 description="Debug info (only in local environment)",
+     *                 @OA\Property(property="token", type="string", example="abc123..."),
+     *                 @OA\Property(property="reset_link", type="string", example="http://frontend.test/reset-password?token=abc123...")
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Validation error",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Email yoki login talab qilinadi")
+     *         )
+     *     )
+     * )
      */
     public function forgotPassword(Request $request)
     {
@@ -509,9 +768,261 @@ class AuthController extends Controller
     }
 
     /**
-     * Reset password using token
-     *
-     * @route POST /api/admin/auth/reset-password
+     * @OA\Get(
+     *     path="/api/v1/employee/auth/permissions",
+     *     summary="Get employee permissions",
+     *     description="Retrieve all permissions for the authenticated employee (cached for 10 minutes)",
+     *     operationId="employeeGetPermissions",
+     *     tags={"Employee - Authentication"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Permissions retrieved successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(
+     *                     property="permissions",
+     *                     type="array",
+     *                     @OA\Items(type="string", example="student.view")
+     *                 ),
+     *                 @OA\Property(property="permission_count", type="integer", example=25),
+     *                 @OA\Property(property="cached_ttl_minutes", type="integer", example=10),
+     *                 @OA\Property(property="user_id", type="integer", example=123),
+     *                 @OA\Property(property="role_id", type="integer", example=2)
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Employee not found",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Employee topilmadi")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="Failed to retrieve permissions",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Ruxsatlarni yuklashda xatolik yuz berdi")
+     *         )
+     *     )
+     * )
+     */
+    public function getPermissions(Request $request)
+    {
+        $admin = auth('employee-api')->user();
+
+        if (!$admin) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Employee topilmadi',
+            ], 404);
+        }
+
+        try {
+            $permissionService = app(\App\Services\Permission\PermissionCacheService::class);
+            $permissions = $permissionService->getUserPermissions($admin->id, 'employee');
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'permissions' => $permissions,
+                    'permission_count' => count($permissions),
+                    'cached_ttl_minutes' => 10,
+                    'user_id' => $admin->id,
+                    'role_id' => $admin->_role,
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            logger()->error('[AuthController] Failed to get permissions', [
+                'user_id' => $admin->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Ruxsatlarni yuklashda xatolik yuz berdi',
+            ], 500);
+        }
+    }
+
+    /**
+     * @OA\Post(
+     *     path="/api/v1/employee/auth/permissions/check",
+     *     summary="Check specific permissions",
+     *     description="Verify if the authenticated employee has specific permissions",
+     *     operationId="employeeCheckPermissions",
+     *     tags={"Employee - Authentication"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"permissions"},
+     *             @OA\Property(
+     *                 property="permissions",
+     *                 type="array",
+     *                 @OA\Items(type="string"),
+     *                 example={"student.view", "student.edit"},
+     *                 description="List of permissions to check"
+     *             ),
+     *             @OA\Property(
+     *                 property="check_type",
+     *                 type="string",
+     *                 enum={"any", "all"},
+     *                 example="any",
+     *                 description="Check if user has ANY or ALL of the permissions (default: any)"
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Permission check completed",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(property="has_access", type="boolean", example=true),
+     *                 @OA\Property(property="check_type", type="string", example="any"),
+     *                 @OA\Property(
+     *                     property="results",
+     *                     type="object",
+     *                     additionalProperties={"type": "boolean"},
+     *                     example={"student.view": true, "student.edit": false}
+     *                 ),
+     *                 @OA\Property(property="user_id", type="integer", example=123)
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Employee not found",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Employee topilmadi")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="Failed to check permissions",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Ruxsatlarni tekshirishda xatolik yuz berdi")
+     *         )
+     *     )
+     * )
+     */
+    public function checkPermissions(Request $request)
+    {
+        $request->validate([
+            'permissions' => 'required|array',
+            'permissions.*' => 'required|string',
+            'check_type' => 'nullable|in:any,all',
+        ]);
+
+        $admin = auth('employee-api')->user();
+
+        if (!$admin) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Employee topilmadi',
+            ], 404);
+        }
+
+        $permissions = $request->input('permissions');
+        $checkType = $request->input('check_type', 'any'); // 'any' or 'all'
+
+        try {
+            $permissionService = app(\App\Services\Permission\PermissionCacheService::class);
+
+            $results = [];
+            $hasAccess = false;
+
+            foreach ($permissions as $permission) {
+                $hasPermission = $permissionService->hasPermission($admin->id, 'employee', $permission);
+                $results[$permission] = $hasPermission;
+
+                if ($checkType === 'any' && $hasPermission) {
+                    $hasAccess = true;
+                }
+            }
+
+            // For 'all' check, user must have ALL permissions
+            if ($checkType === 'all') {
+                $hasAccess = !in_array(false, $results, true);
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'has_access' => $hasAccess,
+                    'check_type' => $checkType,
+                    'results' => $results,
+                    'user_id' => $admin->id,
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            logger()->error('[AuthController] Failed to check permissions', [
+                'user_id' => $admin->id,
+                'permissions' => $permissions,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Ruxsatlarni tekshirishda xatolik yuz berdi',
+            ], 500);
+        }
+    }
+
+    /**
+     * @OA\Post(
+     *     path="/api/v1/employee/auth/reset-password",
+     *     summary="Reset password with token",
+     *     description="Reset employee password using the token received via email",
+     *     operationId="employeeResetPassword",
+     *     tags={"Employee - Authentication"},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"email", "token", "password", "password_confirmation"},
+     *             @OA\Property(property="email", type="string", format="email", example="teacher@university.uz", description="Employee email address"),
+     *             @OA\Property(property="token", type="string", example="abc123def456...", description="Password reset token from email"),
+     *             @OA\Property(property="password", type="string", format="password", example="newpassword123", description="New password (minimum 6 characters)"),
+     *             @OA\Property(property="password_confirmation", type="string", format="password", example="newpassword123", description="Password confirmation")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Password reset successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Parol muvaffaqiyatli o'zgartirildi. Endi tizimga kirishingiz mumkin.")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=400,
+     *         description="Invalid or expired token",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Token noto'g'ri yoki muddati tugagan")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Employee not found",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Foydalanuvchi topilmadi")
+     *         )
+     *     )
+     * )
      */
     public function resetPassword(Request $request)
     {

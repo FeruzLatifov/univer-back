@@ -9,6 +9,83 @@ use Illuminate\Support\Facades\DB;
 
 class AttendanceController extends Controller
 {
+    /**
+     * Get student attendance records
+     *
+     * @OA\Get(
+     *     path="/api/v1/student/attendance",
+     *     tags={"Student - Attendance"},
+     *     summary="Get student attendance records with statistics",
+     *     description="Returns paginated attendance records for the authenticated student along with attendance statistics (present, absent, late, excused) and attendance rate",
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(
+     *         name="page",
+     *         in="query",
+     *         description="Page number for pagination",
+     *         required=false,
+     *         @OA\Schema(type="integer", example=1)
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Successful response",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(
+     *                     property="attendances",
+     *                     type="object",
+     *                     @OA\Property(property="current_page", type="integer", example=1),
+     *                     @OA\Property(property="per_page", type="integer", example=20),
+     *                     @OA\Property(property="total", type="integer", example=150),
+     *                     @OA\Property(
+     *                         property="data",
+     *                         type="array",
+     *                         @OA\Items(
+     *                             @OA\Property(property="id", type="integer", example=1),
+     *                             @OA\Property(property="_student", type="integer", example=123),
+     *                             @OA\Property(property="_date", type="string", format="date", example="2025-11-05"),
+     *                             @OA\Property(property="_attendance_type", type="string", enum={"present", "absent", "late", "excused"}, example="present"),
+     *                             @OA\Property(
+     *                                 property="subject",
+     *                                 type="object",
+     *                                 @OA\Property(property="id", type="integer", example=5),
+     *                                 @OA\Property(property="name", type="string", example="Mathematics")
+     *                             )
+     *                         )
+     *                     )
+     *                 ),
+     *                 @OA\Property(
+     *                     property="statistics",
+     *                     type="object",
+     *                     @OA\Property(property="present", type="integer", example=120),
+     *                     @OA\Property(property="absent", type="integer", example=10),
+     *                     @OA\Property(property="late", type="integer", example=15),
+     *                     @OA\Property(property="excused", type="integer", example=5),
+     *                     @OA\Property(property="total", type="integer", example=150),
+     *                     @OA\Property(property="rate", type="number", format="float", example=90.0, description="Attendance rate percentage")
+     *                 )
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Unauthenticated",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="message", type="string", example="Unauthenticated")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="Server error",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Internal server error")
+     *         )
+     *     )
+     * )
+     */
     public function index(Request $request)
     {
         $student = $request->user();

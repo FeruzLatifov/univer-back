@@ -17,10 +17,58 @@ use Illuminate\Support\Facades\DB;
 class TeacherLoadController extends Controller
 {
     /**
-     * Get teacher load list
-     *
-     * @route GET /api/v1/employee/teacher-load
-     * @return \Illuminate\Http\JsonResponse
+     * @OA\Get(
+     *     path="/api/v1/employee/teacher-load",
+     *     summary="Get teacher workload list",
+     *     description="Retrieve list of teacher workload records for the authenticated employee",
+     *     operationId="employeeTeacherLoadList",
+     *     tags={"Employee - Teacher Load"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Teacher loads retrieved successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(
+     *                     property="teacher_loads",
+     *                     type="array",
+     *                     @OA\Items(
+     *                         type="object",
+     *                         @OA\Property(property="id", type="integer", example=1),
+     *                         @OA\Property(property="_employee", type="integer", example=123),
+     *                         @OA\Property(property="_education_year", type="integer", example=5),
+     *                         @OA\Property(property="total_load", type="number", format="float", example=900.5),
+     *                         @OA\Property(property="created_at", type="string", format="date-time", example="2024-11-05T12:00:00Z"),
+     *                         @OA\Property(property="updated_at", type="string", format="date-time", example="2024-11-05T12:00:00Z"),
+     *                         @OA\Property(property="education_year_name", type="string", example="2024-2025"),
+     *                         @OA\Property(property="education_year_code", type="string", example="2024")
+     *                     )
+     *                 ),
+     *                 @OA\Property(property="total", type="integer", example=3)
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Unauthenticated",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Autentifikatsiya talab qilinadi")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="Server error",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Xatolik yuz berdi"),
+     *             @OA\Property(property="error", type="string", example="Database error")
+     *         )
+     *     )
+     * )
      */
     public function index(Request $request)
     {
@@ -70,11 +118,96 @@ class TeacherLoadController extends Controller
     }
 
     /**
-     * Get teacher load details
-     *
-     * @route GET /api/v1/employee/teacher-load/{id}
-     * @param int $id Teacher load ID
-     * @return \Illuminate\Http\JsonResponse
+     * @OA\Get(
+     *     path="/api/v1/employee/teacher-load/{id}",
+     *     summary="Get teacher workload details",
+     *     description="Retrieve detailed information about a specific teacher workload including subjects, scientific and methodical work",
+     *     operationId="employeeTeacherLoadDetails",
+     *     tags={"Employee - Teacher Load"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         description="Teacher load ID",
+     *         required=true,
+     *         @OA\Schema(type="integer", example=1)
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Teacher load details retrieved successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(
+     *                     property="teacher_load",
+     *                     type="object",
+     *                     @OA\Property(property="id", type="integer", example=1),
+     *                     @OA\Property(property="total_load", type="number", format="float", example=900.5),
+     *                     @OA\Property(property="education_year_name", type="string", example="2024-2025")
+     *                 ),
+     *                 @OA\Property(
+     *                     property="autumn_subjects",
+     *                     type="array",
+     *                     description="Subjects taught in autumn semester",
+     *                     @OA\Items(
+     *                         type="object",
+     *                         @OA\Property(property="subject_name", type="string", example="Mathematics"),
+     *                         @OA\Property(property="training_type_name", type="string", example="Lecture")
+     *                     )
+     *                 ),
+     *                 @OA\Property(
+     *                     property="spring_subjects",
+     *                     type="array",
+     *                     description="Subjects taught in spring semester",
+     *                     @OA\Items(
+     *                         type="object",
+     *                         @OA\Property(property="subject_name", type="string", example="Physics"),
+     *                         @OA\Property(property="training_type_name", type="string", example="Practice")
+     *                     )
+     *                 ),
+     *                 @OA\Property(
+     *                     property="scientific_work",
+     *                     type="array",
+     *                     description="Scientific work activities",
+     *                     @OA\Items(type="object")
+     *                 ),
+     *                 @OA\Property(
+     *                     property="methodical_work",
+     *                     type="array",
+     *                     description="Methodical work activities",
+     *                     @OA\Items(type="object")
+     *                 )
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Unauthenticated",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Autentifikatsiya talab qilinadi")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Teacher load not found",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Yuklama topilmadi")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="Server error",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Xatolik yuz berdi"),
+     *             @OA\Property(property="error", type="string", example="Database error")
+     *         )
+     *     )
+     * )
      */
     public function show($id)
     {
@@ -162,11 +295,40 @@ class TeacherLoadController extends Controller
     }
 
     /**
-     * Download teacher load as PDF
-     *
-     * @route GET /api/v1/employee/teacher-load/{id}/download
-     * @param int $id Teacher load ID
-     * @return \Illuminate\Http\Response
+     * @OA\Get(
+     *     path="/api/v1/employee/teacher-load/{id}/download",
+     *     summary="Download teacher workload as PDF",
+     *     description="Generate and download a PDF document of the teacher's workload (not yet implemented)",
+     *     operationId="employeeTeacherLoadDownload",
+     *     tags={"Employee - Teacher Load"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         description="Teacher load ID",
+     *         required=true,
+     *         @OA\Schema(type="integer", example=1)
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="PDF file download",
+     *         @OA\MediaType(
+     *             mediaType="application/pdf",
+     *             @OA\Schema(
+     *                 type="string",
+     *                 format="binary"
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=501,
+     *         description="Not implemented",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="PDF generatsiya hali implementatsiya qilinmagan")
+     *         )
+     *     )
+     * )
      */
     public function download($id)
     {

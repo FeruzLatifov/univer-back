@@ -3,28 +3,111 @@
 namespace App\Http\Controllers\Api\V1\Teacher;
 
 use App\Http\Controllers\Controller;
-use App\Models\EGrade;
-use App\Models\ESubjectSchedule;
-use App\Models\EStudent;
+use App\Services\Teacher\GradeService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 /**
  * Teacher Grade Controller
  *
- * Manages student grading and exam results
+ * MODULAR MONOLITH - Teacher Module
+ * HTTP LAYER ONLY - No business logic!
+ *
+ * Clean Architecture:
+ * Controller → Service → Repository → Model
+ *
+ * @package App\Http\Controllers\Api\V1\Teacher
  */
 class GradeController extends Controller
 {
     use ApiResponse;
 
     /**
+     * Grade Service (injected)
+     */
+    private GradeService $gradeService;
+
+    /**
+     * Constructor with dependency injection
+     */
+    public function __construct(GradeService $gradeService)
+    {
+        $this->gradeService = $gradeService;
+    }
+
+    /**
      * Get grades for a subject
      *
+     * @OA\Get(
+     *     path="/api/v1/teacher/subject/{id}/grades",
+     *     tags={"Teacher - Grades"},
+     *     summary="Get grades for a subject",
+     *     description="Returns a list of all grades for students in the specified subject. Can be filtered by grade type.",
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         description="Subject ID",
+     *         required=true,
+     *         @OA\Schema(type="integer", example=1)
+     *     ),
+     *     @OA\Parameter(
+     *         name="type",
+     *         in="query",
+     *         description="Filter by grade type",
+     *         required=false,
+     *         @OA\Schema(
+     *             type="string",
+     *             enum={"current", "midterm", "final", "overall"},
+     *             example="midterm"
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Successful response",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="array",
+     *                 @OA\Items(
+     *                     @OA\Property(property="id", type="integer", example=1),
+     *                     @OA\Property(property="student_id", type="integer", example=123),
+     *                     @OA\Property(property="student_name", type="string", example="John Doe"),
+     *                     @OA\Property(property="grade_type", type="string", example="midterm"),
+     *                     @OA\Property(property="grade", type="number", example=85),
+     *                     @OA\Property(property="max_grade", type="integer", example=100),
+     *                     @OA\Property(property="comment", type="string", example="Good work"),
+     *                     @OA\Property(property="created_at", type="string", format="date-time")
+     *                 )
+     *             ),
+     *             @OA\Property(property="message", type="string", example="Baholar ro'yxati")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Teacher profile not found",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Teacher profile not found")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=403,
+     *         description="Forbidden - Teacher doesn't have access to this subject",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Access denied")
+     *         )
+     *     ),
+     *     @OA\Response(response=401, description="Unauthenticated")
+     * )
+     *
      * GET /api/v1/teacher/subject/{id}/grades
+     *
+     * ✅ CLEAN ARCHITECTURE
      *
      * @param Request $request
      * @param int $id Subject ID
@@ -33,69 +116,130 @@ class GradeController extends Controller
     public function index(Request $request, int $id): JsonResponse
     {
         $teacher = $request->user();
-        $gradeType = $request->input('type'); // current, midterm, final
+        $teacherId = $teacher->employee->id ?? null;
+        $gradeType = $request->input('type');
 
-        // Verify teacher teaches this subject
-        $schedule = ESubjectSchedule::where('_subject', $id)
-            ->where('_employee', $teacher->employee->id)
-            ->where('active', true)
-            ->with(['group', 'subject'])
-            ->first();
-
-        if (!$schedule) {
-            return $this->forbiddenResponse('Sizda bu fanga kirish huquqi yo\'q');
+        if (!$teacherId) {
+            return $this->errorResponse('Teacher profile not found', 404);
         }
 
-        // Get students
-        $students = EStudent::where('_group', $schedule->_group)
-            ->where('active', true)
-            ->get();
+        try {
+            // Delegate to service
+            $grades = $this->gradeService->getGrades($teacherId, $id, $gradeType);
 
-        // Get grades
-        $gradesQuery = EGrade::where('_subject', $id)
-            ->whereIn('_student', $students->pluck('id'));
+            return $this->successResponse($grades, 'Baholar ro\'yxati');
 
-        if ($gradeType) {
-            $gradesQuery->where('_grade_type', $this->mapGradeType($gradeType));
+        } catch (\Exception $e) {
+            return $this->forbiddenResponse($e->getMessage());
         }
-
-        $grades = $gradesQuery->get()->keyBy(function ($grade) {
-            return $grade->_student . '_' . $grade->_grade_type;
-        });
-
-        // Build student list with grades
-        $studentList = $students->map(function ($student) use ($grades) {
-            return [
-                'id' => $student->id,
-                'student_id' => $student->student_id_number,
-                'full_name' => $student->full_name,
-                'photo' => $student->image,
-                'grades' => [
-                    'current' => $this->getGradeData($grades, $student->id, EGrade::TYPE_CURRENT),
-                    'midterm' => $this->getGradeData($grades, $student->id, EGrade::TYPE_MIDTERM),
-                    'final' => $this->getGradeData($grades, $student->id, EGrade::TYPE_FINAL),
-                    'overall' => $this->getGradeData($grades, $student->id, EGrade::TYPE_OVERALL),
-                ],
-            ];
-        });
-
-        return $this->successResponse([
-            'subject' => [
-                'id' => $schedule->subject->id,
-                'name' => $schedule->subject->name,
-            ],
-            'group' => [
-                'id' => $schedule->group->id,
-                'name' => $schedule->group->name,
-            ],
-            'students' => $studentList,
-        ], 'Baholar ro\'yxati');
     }
 
     /**
      * Enter/update grade for a student
      *
+     * @OA\Post(
+     *     path="/api/v1/teacher/grade",
+     *     tags={"Teacher - Grades"},
+     *     summary="Enter or update a grade for a student",
+     *     description="Creates a new grade entry for a student in a specific subject",
+     *     security={{"bearerAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"subject_id", "student_id", "grade_type", "grade", "max_grade"},
+     *             @OA\Property(
+     *                 property="subject_id",
+     *                 type="integer",
+     *                 example=1,
+     *                 description="Subject ID (must exist in e_subject)"
+     *             ),
+     *             @OA\Property(
+     *                 property="student_id",
+     *                 type="integer",
+     *                 example=123,
+     *                 description="Student ID (must exist in e_student)"
+     *             ),
+     *             @OA\Property(
+     *                 property="grade_type",
+     *                 type="string",
+     *                 enum={"current", "midterm", "final", "overall"},
+     *                 example="midterm",
+     *                 description="Type of grade"
+     *             ),
+     *             @OA\Property(
+     *                 property="grade",
+     *                 type="number",
+     *                 format="float",
+     *                 minimum=0,
+     *                 example=85,
+     *                 description="Grade value (must be >= 0)"
+     *             ),
+     *             @OA\Property(
+     *                 property="max_grade",
+     *                 type="integer",
+     *                 minimum=1,
+     *                 example=100,
+     *                 description="Maximum possible grade (must be >= 1)"
+     *             ),
+     *             @OA\Property(
+     *                 property="comment",
+     *                 type="string",
+     *                 maxLength=500,
+     *                 nullable=true,
+     *                 example="Good work! Keep improving.",
+     *                 description="Optional teacher comment"
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Grade stored successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(property="id", type="integer", example=1),
+     *                 @OA\Property(property="subject_id", type="integer", example=1),
+     *                 @OA\Property(property="student_id", type="integer", example=123),
+     *                 @OA\Property(property="grade_type", type="string", example="midterm"),
+     *                 @OA\Property(property="grade", type="number", example=85),
+     *                 @OA\Property(property="max_grade", type="integer", example=100),
+     *                 @OA\Property(property="comment", type="string", example="Good work! Keep improving.")
+     *             ),
+     *             @OA\Property(property="message", type="string", example="Baho muvaffaqiyatli saqlandi")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Teacher profile not found",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Teacher profile not found")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Validation error",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="The subject_id field is required")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="Server error",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Error message")
+     *         )
+     *     ),
+     *     @OA\Response(response=401, description="Unauthenticated")
+     * )
+     *
      * POST /api/v1/teacher/grade
+     *
+     * ✅ CLEAN ARCHITECTURE
      *
      * Body:
      * {
@@ -113,7 +257,13 @@ class GradeController extends Controller
     public function store(Request $request): JsonResponse
     {
         $teacher = $request->user();
+        $teacherId = $teacher->employee->id ?? null;
 
+        if (!$teacherId) {
+            return $this->errorResponse('Teacher profile not found', 404);
+        }
+
+        // Validate request
         $validator = Validator::make($request->all(), [
             'subject_id' => 'required|exists:e_subject,id',
             'student_id' => 'required|exists:e_student,id',
@@ -127,66 +277,116 @@ class GradeController extends Controller
             return $this->validationErrorResponse($validator->errors());
         }
 
-        // Verify teacher teaches this subject
-        $schedule = ESubjectSchedule::where('_subject', $request->subject_id)
-            ->where('_employee', $teacher->employee->id)
-            ->where('active', true)
-            ->first();
-
-        if (!$schedule) {
-            return $this->forbiddenResponse('Sizda bu fanga baho qo\'yish huquqi yo\'q');
-        }
-
-        // Verify student is in the group
-        $student = EStudent::where('id', $request->student_id)
-            ->where('_group', $schedule->_group)
-            ->where('active', true)
-            ->first();
-
-        if (!$student) {
-            return $this->forbiddenResponse('Talaba bu guruhda emas');
-        }
-
         try {
-            $gradeType = $this->mapGradeType($request->grade_type);
-
-            $grade = EGrade::updateOrCreate(
-                [
-                    '_student' => $request->student_id,
-                    '_subject' => $request->subject_id,
-                    '_grade_type' => $gradeType,
-                    '_semester' => $schedule->_semester,
-                    '_education_year' => $schedule->_education_year,
-                ],
-                [
-                    'grade' => $request->grade,
-                    'max_grade' => $request->max_grade,
-                    'comment' => $request->comment,
-                    '_employee' => $teacher->employee->id,
-                    'active' => true,
-                ]
+            // Delegate to service
+            $result = $this->gradeService->storeGrade(
+                $teacherId,
+                $request->subject_id,
+                $request->student_id,
+                $request->grade_type,
+                $request->grade,
+                $request->max_grade,
+                $request->comment
             );
 
-            return $this->successResponse([
-                'id' => $grade->id,
-                'student_id' => $student->student_id_number,
-                'student_name' => $student->full_name,
-                'grade_type' => $request->grade_type,
-                'grade' => $grade->grade,
-                'max_grade' => $grade->max_grade,
-                'percentage' => $grade->percentage,
-                'letter_grade' => $grade->letter_grade,
-            ], 'Baho muvaffaqiyatli saqlandi');
+            return $this->successResponse($result, 'Baho muvaffaqiyatli saqlandi');
 
         } catch (\Exception $e) {
-            return $this->serverErrorResponse('Baho qo\'yishda xatolik: ' . $e->getMessage());
+            return $this->serverErrorResponse($e->getMessage());
         }
     }
 
     /**
      * Update existing grade
      *
+     * @OA\Put(
+     *     path="/api/v1/teacher/grade/{id}",
+     *     tags={"Teacher - Grades"},
+     *     summary="Update an existing grade",
+     *     description="Updates the grade value and/or comment for an existing grade entry",
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         description="Grade ID",
+     *         required=true,
+     *         @OA\Schema(type="integer", example=1)
+     *     ),
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"grade", "max_grade"},
+     *             @OA\Property(
+     *                 property="grade",
+     *                 type="number",
+     *                 format="float",
+     *                 minimum=0,
+     *                 example=90,
+     *                 description="Updated grade value (must be >= 0)"
+     *             ),
+     *             @OA\Property(
+     *                 property="max_grade",
+     *                 type="integer",
+     *                 minimum=1,
+     *                 example=100,
+     *                 description="Maximum possible grade (must be >= 1)"
+     *             ),
+     *             @OA\Property(
+     *                 property="comment",
+     *                 type="string",
+     *                 maxLength=500,
+     *                 nullable=true,
+     *                 example="Excellent improvement!",
+     *                 description="Optional teacher comment"
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Grade updated successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(property="id", type="integer", example=1),
+     *                 @OA\Property(property="grade", type="number", example=90),
+     *                 @OA\Property(property="max_grade", type="integer", example=100),
+     *                 @OA\Property(property="comment", type="string", example="Excellent improvement!")
+     *             ),
+     *             @OA\Property(property="message", type="string", example="Baho yangilandi")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Teacher profile not found",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Teacher profile not found")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Validation error",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="The grade field is required")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=403,
+     *         description="Forbidden - Teacher doesn't have permission to update this grade",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Access denied")
+     *         )
+     *     ),
+     *     @OA\Response(response=401, description="Unauthenticated")
+     * )
+     *
      * PUT /api/v1/teacher/grade/{id}
+     *
+     * ✅ CLEAN ARCHITECTURE
      *
      * @param Request $request
      * @param int $id Grade ID
@@ -195,7 +395,13 @@ class GradeController extends Controller
     public function update(Request $request, int $id): JsonResponse
     {
         $teacher = $request->user();
+        $teacherId = $teacher->employee->id ?? null;
 
+        if (!$teacherId) {
+            return $this->errorResponse('Teacher profile not found', 404);
+        }
+
+        // Validate request
         $validator = Validator::make($request->all(), [
             'grade' => 'required|numeric|min:0',
             'max_grade' => 'required|integer|min:1',
@@ -206,36 +412,109 @@ class GradeController extends Controller
             return $this->validationErrorResponse($validator->errors());
         }
 
-        $grade = EGrade::findOrFail($id);
+        try {
+            // Delegate to service
+            $result = $this->gradeService->updateGrade(
+                $teacherId,
+                $id,
+                $request->grade,
+                $request->max_grade,
+                $request->comment
+            );
 
-        // Verify teacher has access
-        $schedule = ESubjectSchedule::where('_subject', $grade->_subject)
-            ->where('_employee', $teacher->employee->id)
-            ->first();
+            return $this->successResponse($result, 'Baho yangilandi');
 
-        if (!$schedule) {
-            return $this->forbiddenResponse('Sizda bu bahoni o\'zgartirish huquqi yo\'q');
+        } catch (\Exception $e) {
+            return $this->forbiddenResponse($e->getMessage());
         }
-
-        $grade->update([
-            'grade' => $request->grade,
-            'max_grade' => $request->max_grade,
-            'comment' => $request->comment,
-        ]);
-
-        return $this->successResponse([
-            'id' => $grade->id,
-            'grade' => $grade->grade,
-            'max_grade' => $grade->max_grade,
-            'percentage' => $grade->percentage,
-            'letter_grade' => $grade->letter_grade,
-        ], 'Baho yangilandi');
     }
 
     /**
      * Get grade statistics and report
      *
+     * @OA\Get(
+     *     path="/api/v1/teacher/grade/report",
+     *     tags={"Teacher - Grades"},
+     *     summary="Get grade statistics and report",
+     *     description="Returns statistical analysis of grades including averages, distribution, and performance metrics for a subject",
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(
+     *         name="subject_id",
+     *         in="query",
+     *         description="Subject ID",
+     *         required=true,
+     *         @OA\Schema(type="integer", example=1)
+     *     ),
+     *     @OA\Parameter(
+     *         name="grade_type",
+     *         in="query",
+     *         description="Filter by grade type",
+     *         required=false,
+     *         @OA\Schema(
+     *             type="string",
+     *             enum={"current", "midterm", "final", "overall"},
+     *             example="midterm"
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Successful response",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(property="subject_id", type="integer", example=1),
+     *                 @OA\Property(property="subject_name", type="string", example="Mathematics"),
+     *                 @OA\Property(property="grade_type", type="string", example="midterm"),
+     *                 @OA\Property(property="total_students", type="integer", example=30),
+     *                 @OA\Property(property="graded_students", type="integer", example=28),
+     *                 @OA\Property(property="average_grade", type="number", example=78.5),
+     *                 @OA\Property(property="highest_grade", type="number", example=95),
+     *                 @OA\Property(property="lowest_grade", type="number", example=45),
+     *                 @OA\Property(property="pass_rate", type="number", example=85.7),
+     *                 @OA\Property(
+     *                     property="distribution",
+     *                     type="object",
+     *                     @OA\Property(property="excellent", type="integer", example=8),
+     *                     @OA\Property(property="good", type="integer", example=12),
+     *                     @OA\Property(property="satisfactory", type="integer", example=6),
+     *                     @OA\Property(property="poor", type="integer", example=2)
+     *                 )
+     *             ),
+     *             @OA\Property(property="message", type="string", example="Baholar hisoboti")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Teacher profile not found",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Teacher profile not found")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Validation error",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="The subject_id field is required")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=403,
+     *         description="Forbidden - Teacher doesn't have access to this subject",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Access denied")
+     *         )
+     *     ),
+     *     @OA\Response(response=401, description="Unauthenticated")
+     * )
+     *
      * GET /api/v1/teacher/grade/report
+     *
+     * ✅ CLEAN ARCHITECTURE
      *
      * @param Request $request
      * @return JsonResponse
@@ -243,7 +522,13 @@ class GradeController extends Controller
     public function report(Request $request): JsonResponse
     {
         $teacher = $request->user();
+        $teacherId = $teacher->employee->id ?? null;
 
+        if (!$teacherId) {
+            return $this->errorResponse('Teacher profile not found', 404);
+        }
+
+        // Validate request
         $validator = Validator::make($request->all(), [
             'subject_id' => 'required|exists:e_subject,id',
             'grade_type' => 'nullable|in:current,midterm,final,overall',
@@ -253,88 +538,18 @@ class GradeController extends Controller
             return $this->validationErrorResponse($validator->errors());
         }
 
-        // Verify teacher teaches this subject
-        $schedule = ESubjectSchedule::where('_subject', $request->subject_id)
-            ->where('_employee', $teacher->employee->id)
-            ->where('active', true)
-            ->with(['subject', 'group'])
-            ->first();
+        try {
+            // Delegate to service
+            $report = $this->gradeService->getGradeReport(
+                $teacherId,
+                $request->subject_id,
+                $request->grade_type
+            );
 
-        if (!$schedule) {
-            return $this->forbiddenResponse('Sizda bu fanga kirish huquqi yo\'q');
+            return $this->successResponse($report, 'Baholar hisoboti');
+
+        } catch (\Exception $e) {
+            return $this->forbiddenResponse($e->getMessage());
         }
-
-        $gradeType = $request->grade_type ? $this->mapGradeType($request->grade_type) : null;
-
-        // Get grades
-        $gradesQuery = EGrade::where('_subject', $request->subject_id);
-
-        if ($gradeType) {
-            $gradesQuery->where('_grade_type', $gradeType);
-        }
-
-        $grades = $gradesQuery->get();
-
-        // Calculate statistics
-        $gradeValues = $grades->pluck('percentage');
-
-        $statistics = [
-            'total_students' => $grades->count(),
-            'average_percentage' => $gradeValues->avg(),
-            'highest_percentage' => $gradeValues->max(),
-            'lowest_percentage' => $gradeValues->min(),
-            'distribution' => [
-                'A' => $grades->where('letter_grade', 'A')->count(),
-                'B' => $grades->where('letter_grade', 'B')->count(),
-                'C' => $grades->where('letter_grade', 'C')->count(),
-                'D' => $grades->where('letter_grade', 'D')->count(),
-                'E' => $grades->where('letter_grade', 'E')->count(),
-                'F' => $grades->where('letter_grade', 'F')->count(),
-            ],
-        ];
-
-        return $this->successResponse([
-            'subject' => $schedule->subject->name,
-            'group' => $schedule->group->name,
-            'grade_type' => $request->grade_type ?? 'all',
-            'statistics' => $statistics,
-        ], 'Baholar hisoboti');
-    }
-
-    /**
-     * Helper: Map grade type string to constant
-     */
-    private function mapGradeType(string $type): string
-    {
-        $map = [
-            'current' => EGrade::TYPE_CURRENT,
-            'midterm' => EGrade::TYPE_MIDTERM,
-            'final' => EGrade::TYPE_FINAL,
-            'overall' => EGrade::TYPE_OVERALL,
-        ];
-
-        return $map[$type] ?? EGrade::TYPE_CURRENT;
-    }
-
-    /**
-     * Helper: Get grade data for student
-     */
-    private function getGradeData($grades, $studentId, $gradeType): ?array
-    {
-        $key = $studentId . '_' . $gradeType;
-        $grade = $grades->get($key);
-
-        if (!$grade) {
-            return null;
-        }
-
-        return [
-            'id' => $grade->id,
-            'grade' => $grade->grade,
-            'max_grade' => $grade->max_grade,
-            'percentage' => $grade->percentage,
-            'letter_grade' => $grade->letter_grade,
-            'comment' => $grade->comment,
-        ];
     }
 }

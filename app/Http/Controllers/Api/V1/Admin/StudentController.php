@@ -6,56 +6,136 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\StoreStudentRequest;
 use App\Http\Requests\Api\V1\UpdateStudentRequest;
 use App\Http\Resources\Api\V1\StudentResource;
-use App\Models\EStudent;
+use App\Services\Admin\StudentService;
+use App\Traits\ApiResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
-use Spatie\QueryBuilder\QueryBuilder;
-use Spatie\QueryBuilder\AllowedFilter;
+use Illuminate\Http\JsonResponse;
 
 /**
  * Student Management Controller (Admin Panel)
  *
- * API Version: 1.0
- * Purpose: Admin xodimlar tomonidan talabalarni boshqarish (CRUD)
+ * MODULAR MONOLITH - Admin Module
+ * HTTP LAYER ONLY - No business logic!
+ *
+ * Clean Architecture:
+ * Controller → Service → Repository → Model
+ *
+ * @package App\Http\Controllers\Api\V1\Admin
  */
 class StudentController extends Controller
 {
+    use ApiResponse;
+
+    /**
+     * Student Service (injected)
+     */
+    private StudentService $studentService;
+
+    /**
+     * Constructor with dependency injection
+     */
+    public function __construct(StudentService $studentService)
+    {
+        $this->studentService = $studentService;
+    }
+
     /**
      * Get students list with filters
      *
-     * @route GET /api/v1/admin/students
+     * @OA\Get(
+     *     path="/api/v1/admin/students",
+     *     tags={"Admin - Students"},
+     *     summary="Get all students with filters",
+     *     description="Returns a paginated list of students with optional filtering by group, specialty, level, and status",
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(
+     *         name="search",
+     *         in="query",
+     *         description="Search by student name or student code",
+     *         required=false,
+     *         @OA\Schema(type="string", example="Ali")
+     *     ),
+     *     @OA\Parameter(
+     *         name="group_id",
+     *         in="query",
+     *         description="Filter by group ID",
+     *         required=false,
+     *         @OA\Schema(type="integer", example=1)
+     *     ),
+     *     @OA\Parameter(
+     *         name="specialty_id",
+     *         in="query",
+     *         description="Filter by specialty ID",
+     *         required=false,
+     *         @OA\Schema(type="integer", example=1)
+     *     ),
+     *     @OA\Parameter(
+     *         name="_level",
+     *         in="query",
+     *         description="Filter by education level (1-4 for Bachelor)",
+     *         required=false,
+     *         @OA\Schema(type="integer", example=1)
+     *     ),
+     *     @OA\Parameter(
+     *         name="active",
+     *         in="query",
+     *         description="Filter by active status",
+     *         required=false,
+     *         @OA\Schema(type="boolean", example=true)
+     *     ),
+     *     @OA\Parameter(
+     *         name="page",
+     *         in="query",
+     *         description="Page number for pagination",
+     *         required=false,
+     *         @OA\Schema(type="integer", example=1)
+     *     ),
+     *     @OA\Parameter(
+     *         name="per_page",
+     *         in="query",
+     *         description="Items per page",
+     *         required=false,
+     *         @OA\Schema(type="integer", example=15)
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Successful response",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="array",
+     *                 @OA\Items(
+     *                     @OA\Property(property="id", type="integer", example=1),
+     *                     @OA\Property(property="first_name", type="string", example="Ali"),
+     *                     @OA\Property(property="last_name", type="string", example="Karimov"),
+     *                     @OA\Property(property="student_code", type="string", example="STU001"),
+     *                     @OA\Property(property="group_name", type="string", example="CS-101"),
+     *                     @OA\Property(property="specialty_name", type="string", example="Computer Science"),
+     *                     @OA\Property(property="level", type="integer", example=1),
+     *                     @OA\Property(property="email", type="string", example="ali.karimov@student.uz"),
+     *                     @OA\Property(property="phone", type="string", example="+998901234567"),
+     *                     @OA\Property(property="active", type="boolean", example=true)
+     *                 )
+     *             ),
+     *             @OA\Property(
+     *                 property="meta",
+     *                 type="object",
+     *                 @OA\Property(property="current_page", type="integer", example=1),
+     *                 @OA\Property(property="last_page", type="integer", example=25),
+     *                 @OA\Property(property="per_page", type="integer", example=15),
+     *                 @OA\Property(property="total", type="integer", example=365)
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(response=401, description="Unauthenticated")
+     * )
      */
-    public function index(Request $request)
+    public function index(Request $request): JsonResponse
     {
-        $students = QueryBuilder::for(EStudent::class)
-            ->allowedFilters([
-                AllowedFilter::exact('id'),
-                AllowedFilter::partial('first_name'),
-                AllowedFilter::partial('second_name'),
-                AllowedFilter::partial('student_id_number'),
-                AllowedFilter::exact('_gender'),
-                AllowedFilter::exact('active'),
-            ])
-            ->allowedIncludes([
-                'meta',
-                'meta.group',
-                'meta.specialty',
-                'meta.department',
-                'country',
-                'gender',
-            ])
-            ->allowedSorts([
-                'id',
-                'second_name',
-                'first_name',
-                'student_id_number',
-                'created_at',
-                'updated_at',
-            ])
-            ->paginate($request->input('per_page', 20));
+        $students = $this->studentService->getStudentsList($request->all());
 
-        return response()->json([
-            'success' => true,
+        return $this->successResponse([
             'data' => StudentResource::collection($students->items()),
             'meta' => [
                 'current_page' => $students->currentPage(),
@@ -69,244 +149,357 @@ class StudentController extends Controller
     /**
      * Get single student
      *
-     * @route GET /api/v1/admin/students/{id}
+     * @OA\Get(
+     *     path="/api/v1/admin/students/{id}",
+     *     tags={"Admin - Students"},
+     *     summary="Get single student details",
+     *     description="Returns detailed information about a specific student including group, grades, and attendance",
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         description="Student ID",
+     *         required=true,
+     *         @OA\Schema(type="integer", example=1)
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Successful response",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(property="id", type="integer", example=1),
+     *                 @OA\Property(property="first_name", type="string", example="Ali"),
+     *                 @OA\Property(property="last_name", type="string", example="Karimov"),
+     *                 @OA\Property(property="middle_name", type="string", example="Rustamovich"),
+     *                 @OA\Property(property="student_code", type="string", example="STU001"),
+     *                 @OA\Property(property="group", type="object"),
+     *                 @OA\Property(property="specialty", type="object"),
+     *                 @OA\Property(property="email", type="string", example="ali.karimov@student.uz"),
+     *                 @OA\Property(property="phone", type="string", example="+998901234567"),
+     *                 @OA\Property(property="birth_date", type="string", format="date", example="2000-03-15"),
+     *                 @OA\Property(property="passport_number", type="string", example="AA1234567"),
+     *                 @OA\Property(property="address", type="string", example="Tashkent, Uzbekistan"),
+     *                 @OA\Property(property="active", type="boolean", example=true)
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Student not found",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Student topilmadi")
+     *         )
+     *     ),
+     *     @OA\Response(response=401, description="Unauthenticated")
+     * )
      */
-    public function show($id)
+    public function show($id): JsonResponse
     {
-        $student = QueryBuilder::for(EStudent::class)
-            ->allowedIncludes([
-                'meta',
-                'meta.group',
-                'meta.specialty',
-                'meta.department',
-                'meta.educationType',
-                'meta.educationForm',
-                'meta.paymentForm',
-                'country',
-                'gender',
-                'allMeta',
-            ])
-            ->findOrFail($id);
+        try {
+            $student = $this->studentService->getStudent($id);
 
-        return response()->json([
-            'success' => true,
-            'data' => new StudentResource($student),
-        ]);
+            return $this->successResponse(new StudentResource($student));
+
+        } catch (\Exception $e) {
+            return $this->errorResponse('Student topilmadi', 404);
+        }
     }
 
     /**
      * Create new student
      *
-     * @route POST /api/v1/admin/students
+     * @OA\Post(
+     *     path="/api/v1/admin/students",
+     *     tags={"Admin - Students"},
+     *     summary="Create a new student",
+     *     description="Creates a new student record with the provided data. Requires validated request data.",
+     *     security={{"bearerAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"first_name", "last_name", "student_code", "group_id"},
+     *             @OA\Property(property="first_name", type="string", maxLength=255, example="Ali", description="Student first name"),
+     *             @OA\Property(property="last_name", type="string", maxLength=255, example="Karimov", description="Student last name"),
+     *             @OA\Property(property="middle_name", type="string", maxLength=255, nullable=true, example="Rustamovich", description="Student middle name"),
+     *             @OA\Property(property="student_code", type="string", maxLength=50, example="STU001", description="Unique student code"),
+     *             @OA\Property(property="group_id", type="integer", example=1, description="Group ID (must exist)"),
+     *             @OA\Property(property="email", type="string", format="email", nullable=true, example="ali.karimov@student.uz", description="Student email address"),
+     *             @OA\Property(property="phone", type="string", nullable=true, example="+998901234567", description="Student phone number"),
+     *             @OA\Property(property="birth_date", type="string", format="date", nullable=true, example="2000-03-15", description="Date of birth"),
+     *             @OA\Property(property="passport_number", type="string", nullable=true, example="AA1234567", description="Passport number"),
+     *             @OA\Property(property="passport_given_date", type="string", format="date", nullable=true, example="2015-03-20", description="Passport issue date"),
+     *             @OA\Property(property="passport_given_by", type="string", nullable=true, example="Tashkent IIB", description="Passport issuing authority"),
+     *             @OA\Property(property="address", type="string", nullable=true, example="Tashkent, Uzbekistan", description="Home address"),
+     *             @OA\Property(property="active", type="boolean", example=true, description="Active status")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=201,
+     *         description="Student created successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Student muvaffaqiyatli yaratildi"),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(property="id", type="integer", example=1),
+     *                 @OA\Property(property="first_name", type="string", example="Ali"),
+     *                 @OA\Property(property="student_code", type="string", example="STU001")
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(response=422, description="Validation error"),
+     *     @OA\Response(response=401, description="Unauthenticated")
+     * )
      */
-    public function store(StoreStudentRequest $request)
+    public function store(StoreStudentRequest $request): JsonResponse
     {
-        $validated = $request->validated();
+        try {
+            $student = $this->studentService->createStudent($request->validated());
 
-        // Hash password (Yii2 compatible bcrypt)
-        if (isset($validated['password'])) {
-            $validated['password'] = Hash::make($validated['password']);
+            return $this->successResponse(
+                new StudentResource($student),
+                'Student muvaffaqiyatli yaratildi',
+                201
+            );
+
+        } catch (\Exception $e) {
+            return $this->errorResponse('Student yaratishda xatolik: ' . $e->getMessage(), 500);
         }
-
-        $student = EStudent::create($validated);
-        $student->load('meta.specialty', 'meta.group');
-
-        return response()->json([
-            'success' => true,
-            'data' => new StudentResource($student),
-            'message' => 'Student muvaffaqiyatli yaratildi',
-        ], 201);
     }
 
     /**
      * Update student
      *
-     * @route PUT /api/v1/admin/students/{id}
+     * @OA\Put(
+     *     path="/api/v1/admin/students/{id}",
+     *     tags={"Admin - Students"},
+     *     summary="Update an existing student",
+     *     description="Updates student details. All fields are optional. Requires validated request data.",
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         description="Student ID",
+     *         required=true,
+     *         @OA\Schema(type="integer", example=1)
+     *     ),
+     *     @OA\RequestBody(
+     *         required=false,
+     *         @OA\JsonContent(
+     *             @OA\Property(property="first_name", type="string", maxLength=255, nullable=true, example="Ali"),
+     *             @OA\Property(property="last_name", type="string", maxLength=255, nullable=true, example="Karimov"),
+     *             @OA\Property(property="middle_name", type="string", maxLength=255, nullable=true, example="Rustamovich"),
+     *             @OA\Property(property="student_code", type="string", maxLength=50, nullable=true, example="STU001"),
+     *             @OA\Property(property="group_id", type="integer", nullable=true, example=1),
+     *             @OA\Property(property="email", type="string", format="email", nullable=true, example="ali.karimov@student.uz"),
+     *             @OA\Property(property="phone", type="string", nullable=true, example="+998901234567"),
+     *             @OA\Property(property="birth_date", type="string", format="date", nullable=true, example="2000-03-15"),
+     *             @OA\Property(property="passport_number", type="string", nullable=true, example="AA1234567"),
+     *             @OA\Property(property="address", type="string", nullable=true, example="Tashkent, Uzbekistan"),
+     *             @OA\Property(property="active", type="boolean", nullable=true, example=true)
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Student updated successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Student muvaffaqiyatli yangilandi"),
+     *             @OA\Property(property="data", type="object")
+     *         )
+     *     ),
+     *     @OA\Response(response=404, description="Student not found"),
+     *     @OA\Response(response=422, description="Validation error"),
+     *     @OA\Response(response=401, description="Unauthenticated")
+     * )
      */
-    public function update(UpdateStudentRequest $request, $id)
+    public function update(UpdateStudentRequest $request, $id): JsonResponse
     {
-        $student = EStudent::findOrFail($id);
-        $validated = $request->validated();
+        try {
+            $student = $this->studentService->updateStudent($id, $request->validated());
 
-        // Hash password if provided (Yii2 compatible bcrypt)
-        if (isset($validated['password'])) {
-            $validated['password'] = Hash::make($validated['password']);
+            return $this->successResponse(
+                new StudentResource($student),
+                'Student muvaffaqiyatli yangilandi'
+            );
+
+        } catch (\Exception $e) {
+            return $this->errorResponse('Student yangilashda xatolik: ' . $e->getMessage(), 500);
         }
-
-        $student->update($validated);
-        $student->load('meta.specialty', 'meta.group');
-
-        return response()->json([
-            'success' => true,
-            'data' => new StudentResource($student),
-            'message' => 'Student muvaffaqiyatli yangilandi',
-        ]);
     }
 
     /**
      * Delete student (soft delete)
      *
-     * @route DELETE /api/v1/admin/students/{id}
+     * @OA\Delete(
+     *     path="/api/v1/admin/students/{id}",
+     *     tags={"Admin - Students"},
+     *     summary="Delete a student",
+     *     description="Soft deletes a student. The student will be marked as inactive (deactivated).",
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         description="Student ID",
+     *         required=true,
+     *         @OA\Schema(type="integer", example=1)
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Student deleted successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Student o'chirildi (deactivated)"),
+     *             @OA\Property(property="data", type="array", @OA\Items())
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Student not found",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Student not found")
+     *         )
+     *     ),
+     *     @OA\Response(response=401, description="Unauthenticated")
+     * )
      */
-    public function destroy($id)
+    public function destroy($id): JsonResponse
     {
-        $student = EStudent::findOrFail($id);
-        $student->update(['active' => false]);
+        try {
+            $this->studentService->deleteStudent($id);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Student o\'chirildi (deactivated)',
-        ]);
+            return $this->successResponse([], 'Student o\'chirildi (deactivated)');
+
+        } catch (\Exception $e) {
+            return $this->errorResponse('Student o\'chirishda xatolik: ' . $e->getMessage(), 500);
+        }
     }
 
     /**
      * Upload student image
      *
-     * @route POST /api/v1/admin/students/{id}/image
+     * @OA\Post(
+     *     path="/api/v1/admin/students/{id}/image",
+     *     tags={"Admin - Students"},
+     *     summary="Upload student profile image",
+     *     description="Uploads a profile image for the specified student. Max file size: 5MB. Allowed formats: JPEG, PNG, JPG.",
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         description="Student ID",
+     *         required=true,
+     *         @OA\Schema(type="integer", example=1)
+     *     ),
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\MediaType(
+     *             mediaType="multipart/form-data",
+     *             @OA\Schema(
+     *                 required={"image"},
+     *                 @OA\Property(
+     *                     property="image",
+     *                     type="string",
+     *                     format="binary",
+     *                     description="Image file (JPEG, PNG, JPG, max 5MB)"
+     *                 )
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Image uploaded successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Rasm muvaffaqiyatli yuklandi"),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(property="image_url", type="string", example="/storage/students/images/student_1.jpg"),
+     *                 @OA\Property(property="image_path", type="string", example="students/images/student_1.jpg")
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(response=422, description="Validation error (invalid file type or size)"),
+     *     @OA\Response(response=404, description="Student not found"),
+     *     @OA\Response(response=401, description="Unauthenticated")
+     * )
      */
-    public function uploadImage(Request $request, $id)
+    public function uploadImage(Request $request, $id): JsonResponse
     {
         $request->validate([
             'image' => 'required|image|mimes:jpeg,png,jpg|max:5120', // 5MB
         ]);
 
-        $student = EStudent::findOrFail($id);
-
-        $uploadService = app(\App\Services\FileUploadService::class);
-
         try {
-            // Delete old image if exists
-            if ($student->image) {
-                $uploadService->deleteImage($student->image);
-            }
+            $result = $this->studentService->uploadStudentImage($id, $request->file('image'));
 
-            // Upload new image
-            $path = $uploadService->uploadImage($request->file('image'), 'student', $student->id);
+            return $this->successResponse($result, 'Rasm muvaffaqiyatli yuklandi');
 
-            // Update student record
-            $student->update(['image' => $path]);
-
-            return response()->json([
-                'success' => true,
-                'data' => [
-                    'image' => $path,
-                    'image_url' => $uploadService->getImageUrl($path),
-                ],
-                'message' => 'Rasm muvaffaqiyatli yuklandi',
-            ]);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Rasm yuklashda xatolik: ' . $e->getMessage(),
-            ], 500);
+            return $this->errorResponse('Rasm yuklashda xatolik: ' . $e->getMessage(), 500);
         }
     }
 
     /**
-     * Get authenticated student's profile (Self-Service)
+     * Get student statistics
      *
-     * @route GET /api/v1/student/profile
+     * @OA\Get(
+     *     path="/api/v1/admin/students/statistics",
+     *     tags={"Admin - Students"},
+     *     summary="Get student statistics",
+     *     description="Returns statistical data about students including total count, by level, by specialty, and active status",
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Successful response",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(property="total_students", type="integer", example=1250),
+     *                 @OA\Property(property="active_students", type="integer", example=1180),
+     *                 @OA\Property(property="inactive_students", type="integer", example=70),
+     *                 @OA\Property(
+     *                     property="by_level",
+     *                     type="object",
+     *                     @OA\Property(property="1", type="integer", example=320),
+     *                     @OA\Property(property="2", type="integer", example=310),
+     *                     @OA\Property(property="3", type="integer", example=295),
+     *                     @OA\Property(property="4", type="integer", example=255)
+     *                 ),
+     *                 @OA\Property(
+     *                     property="by_specialty",
+     *                     type="array",
+     *                     @OA\Items(
+     *                         type="object",
+     *                         @OA\Property(property="specialty_name", type="string", example="Computer Science"),
+     *                         @OA\Property(property="count", type="integer", example=240)
+     *                     )
+     *                 ),
+     *                 @OA\Property(
+     *                     property="by_gender",
+     *                     type="object",
+     *                     @OA\Property(property="male", type="integer", example=680),
+     *                     @OA\Property(property="female", type="integer", example=570)
+     *                 )
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(response=401, description="Unauthenticated")
+     * )
      */
-    public function myProfile()
+    public function statistics(): JsonResponse
     {
-        $student = auth('student-api')->user();
+        $stats = $this->studentService->getStudentStatistics();
 
-        if (!$student) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Student topilmadi',
-            ], 404);
-        }
-
-        $student->load('meta.specialty', 'meta.group', 'meta.department');
-
-        return response()->json([
-            'success' => true,
-            'data' => new StudentResource($student),
-        ]);
-    }
-
-    /**
-     * Update authenticated student's profile (Self-Service)
-     *
-     * @route PUT /api/v1/student/profile
-     */
-    public function updateProfile(Request $request)
-    {
-        $student = auth('student-api')->user();
-
-        if (!$student) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Student topilmadi',
-            ], 404);
-        }
-
-        // Students can only update limited fields
-        $validated = $request->validate([
-            'phone' => 'sometimes|string|max:50',
-            'phone_secondary' => 'nullable|string|max:50',
-            'email' => 'sometimes|email|max:100',
-            'telegram_username' => 'nullable|string|max:50',
-        ]);
-
-        $student->update($validated);
-        $student->load('meta.specialty', 'meta.group');
-
-        return response()->json([
-            'success' => true,
-            'data' => new StudentResource($student),
-            'message' => 'Profil muvaffaqiyatli yangilandi',
-        ]);
-    }
-
-    /**
-     * Upload student avatar (Self-Service)
-     *
-     * @route POST /api/v1/student/profile/avatar
-     */
-    public function uploadAvatar(Request $request)
-    {
-        $request->validate([
-            'image' => 'required|image|mimes:jpeg,png,jpg|max:5120', // 5MB
-        ]);
-
-        $student = auth('student-api')->user();
-
-        if (!$student) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Student topilmadi',
-            ], 404);
-        }
-
-        $uploadService = app(\App\Services\FileUploadService::class);
-
-        try {
-            // Delete old image if exists
-            if ($student->image) {
-                $uploadService->deleteImage($student->image);
-            }
-
-            // Upload new image
-            $path = $uploadService->uploadImage($request->file('image'), 'student', $student->id);
-
-            // Update student record
-            $student->update(['image' => $path]);
-
-            return response()->json([
-                'success' => true,
-                'data' => [
-                    'image' => $path,
-                    'image_url' => $uploadService->getImageUrl($path),
-                ],
-                'message' => 'Rasm muvaffaqiyatli yuklandi',
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Rasm yuklashda xatolik: ' . $e->getMessage(),
-            ], 500);
-        }
+        return $this->successResponse($stats);
     }
 }

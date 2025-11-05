@@ -118,8 +118,12 @@ Telegram: @univer_support
  *         )
  *     ),
  *     @OA\Server(
- *         url=L5_SWAGGER_CONST_HOST,
- *         description="API Server"
+ *         url="http://localhost:8000",
+ *         description="API Server (Development)"
+ *     ),
+ *     @OA\Server(
+ *         url="http://api.univer.uz",
+ *         description="API Server (Production)"
  *     ),
  *     @OA\Components(
  *         @OA\SecurityScheme(
@@ -161,6 +165,30 @@ Telegram: @univer_support
  *     @OA\Tag(
  *         name="Employee - Profile",
  *         description="Xodim profil"
+ *     ),
+ *     @OA\Tag(
+ *         name="Teacher - Assignments",
+ *         description="O'qituvchi topshiriqlar boshqaruvi (vazifalar, baholash, statistika)"
+ *     ),
+ *     @OA\Tag(
+ *         name="Teacher - Tests",
+ *         description="O'qituvchi testlar boshqaruvi (testlar, savollar, natijalar, import/export)"
+ *     ),
+ *     @OA\Tag(
+ *         name="Teacher - Exams",
+ *         description="O'qituvchi imtihonlar boshqaruvi (imtihonlar, natijalar kiritish, statistika)"
+ *     ),
+ *     @OA\Tag(
+ *         name="Teacher - Topics",
+ *         description="O'qituvchi mavzular boshqaruvi (mavzular, o'quv dasturi, tartibga solish)"
+ *     ),
+ *     @OA\Tag(
+ *         name="Teacher - Resources",
+ *         description="O'qituvchi resurslar boshqaruvi (fayllar, havolalar, materiallar)"
+ *     ),
+ *     @OA\Tag(
+ *         name="Teacher - Subjects",
+ *         description="O'qituvchi fanlar (fanlar ro'yxati, talabalar, fan tafsilotlari)"
  *     )
  * )
  */

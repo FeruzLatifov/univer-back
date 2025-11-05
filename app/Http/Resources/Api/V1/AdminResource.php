@@ -35,17 +35,27 @@ class AdminResource extends JsonResource
             $rolesCollection = collect([$activeRole]);
         }
 
-        // Get user permissions (from our new system)
+        // ZERO TRUST APPROACH:
+        // Permissions are NOT included in login response (keeps response small ~2KB)
+        // Frontend must call GET /auth/permissions separately
+        // This prevents JWT token bloat (100+ permissions = 8-15KB)
+        //
+        // Optional: include permissions if explicitly requested
+        $includePermissions = request()->has('include_permissions')
+            && request()->boolean('include_permissions');
+
         $permissions = [];
-        try {
-            if (method_exists($this->resource, 'getAllPermissions')) {
-                $permissions = $this->resource->getAllPermissions();
+        if ($includePermissions) {
+            try {
+                if (method_exists($this->resource, 'getAllPermissions')) {
+                    $permissions = $this->resource->getAllPermissions();
+                }
+            } catch (\Throwable $e) {
+                logger()->warning('[AdminResource] Failed to get permissions', [
+                    'user_id' => $this->id,
+                    'error' => $e->getMessage(),
+                ]);
             }
-        } catch (\Throwable $e) {
-            logger()->warning('[AdminResource] Failed to get permissions', [
-                'user_id' => $this->id,
-                'error' => $e->getMessage(),
-            ]);
         }
 
         return [
@@ -67,7 +77,9 @@ class AdminResource extends JsonResource
                     'name' => method_exists($role, 'getDisplayNameAttribute') ? $role->display_name : ($role->name ?? $role->code),
                 ])
                 ->values(),
-            'permissions' => $permissions, // NEW: Add permissions to JWT
+            // Permissions only included if explicitly requested
+            // Use GET /auth/permissions endpoint instead
+            'permissions' => $includePermissions ? $permissions : null,
             'status' => $this->status,
             'active' => $this->status === 'enable', // Map status to active for frontend
             'employee' => $this->whenLoaded('employee', function () {
