@@ -158,8 +158,9 @@ class DocumentServiceTest extends TestCase
     {
         $student = EStudent::factory()->create();
         
-        // File larger than allowed limit
-        $largeFile = UploadedFile::fake()->create('large.pdf', 20000); // 20MB
+        // File larger than allowed limit (20MB, exceeds typical 10MB limit)
+        $maxFileSizeMb = 20; // Above typical limit
+        $largeFile = UploadedFile::fake()->create('large.pdf', $maxFileSizeMb * 1024);
 
         $documentData = [
             'title' => 'Large Document',

@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Enums\RateLimitType;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -27,8 +28,9 @@ class ApiRateLimiter
      */
     public function handle(Request $request, Closure $next, string $limit = 'default'): Response
     {
-        $limiterKey = $this->resolveRequestKey($request, $limit);
-        $maxAttempts = $this->getMaxAttempts($limit);
+        $limitType = $this->resolveRateLimitType($limit);
+        $limiterKey = $this->resolveRequestKey($request, $limitType->value);
+        $maxAttempts = $limitType->maxAttempts();
 
         if (RateLimiter::tooManyAttempts($limiterKey, $maxAttempts)) {
             $retryAfter = RateLimiter::availableIn($limiterKey);
@@ -59,6 +61,14 @@ class ApiRateLimiter
     }
 
     /**
+     * Resolve rate limit type from string
+     */
+    protected function resolveRateLimitType(string $limit): RateLimitType
+    {
+        return RateLimitType::tryFrom($limit) ?? RateLimitType::DEFAULT;
+    }
+
+    /**
      * Resolve the rate limiter key for the request
      */
     protected function resolveRequestKey(Request $request, string $limit): string
@@ -71,20 +81,5 @@ class ApiRateLimiter
 
         // For unauthenticated requests, use IP address
         return "api:{$limit}:{$request->ip()}";
-    }
-
-    /**
-     * Get maximum attempts based on limit type
-     */
-    protected function getMaxAttempts(string $limit): int
-    {
-        return match($limit) {
-            'public' => 30,      // Public endpoints
-            'student' => 80,     // Student endpoints
-            'teacher' => 100,    // Teacher endpoints
-            'admin' => 120,      // Admin endpoints
-            'auth' => 10,        // Authentication endpoints (strict)
-            default => 60,       // Default rate limit
-        };
     }
 }
