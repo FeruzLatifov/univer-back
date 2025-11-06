@@ -1,0 +1,30 @@
+includes:
+    - ./vendor/larastan/larastan/extension.neon
+
+parameters:
+    level: 6
+    paths:
+        - app
+    
+    excludePaths:
+        - app/Console/Kernel.php
+        - app/Exceptions/Handler.php
+        - app/Http/Middleware
+    
+    checkMissingIterableValueType: false
+    checkGenericClassInNonGenericObjectType: false
+    
+    ignoreErrors:
+        # Eloquent magic methods
+        - '#Call to an undefined method Illuminate\\Database\\Eloquent\\Builder#'
+        - '#Access to an undefined property Illuminate\\Database\\Eloquent\\Model#'
+        
+        # Common Laravel patterns
+        - '#Property .* does not accept#'
+        - '#expects .*, .* given#'
+    
+    treatPhpDocTypesAsCertain: false
+    
+    # Performance optimization
+    parallel:
+        maximumNumberOfProcesses: 4
