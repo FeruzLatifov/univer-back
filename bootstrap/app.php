@@ -46,6 +46,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'locale' => \App\Http\Middleware\SetLocale::class,
             'permission' => \App\Http\Middleware\CheckPermission::class,
             'load.translations' => \App\Http\Middleware\LoadTranslations::class,
+            'throttle.api' => \App\Http\Middleware\ApiRateLimiter::class,
         ]);
 
         // Configure authentication redirect to return null for API routes
