@@ -3,6 +3,7 @@
 namespace App\Repositories;
 
 use App\Contracts\Repositories\MenuRepositoryInterface;
+use App\Models\EAdmin;
 use App\Models\EAdminResource;
 use App\Models\EAdminRole;
 use Illuminate\Support\Collection;
@@ -120,12 +121,24 @@ class MenuRepository implements MenuRepositoryInterface
      */
     public function invalidateMenuCache(int $userId): bool
     {
-        // Clear all locale variants
-        $locales = ['uz', 'oz', 'ru', 'en'];
+        $locales = $this->getSupportedLocales();
 
         foreach ($locales as $locale) {
-            $cacheKey = self::CACHE_PREFIX . "user:{$userId}:locale:{$locale}";
-            Cache::forget($cacheKey);
+            Cache::forget(self::CACHE_PREFIX . "user:{$userId}:locale:{$locale}");
+        }
+
+        $admin = EAdmin::with('roles')->find($userId);
+        if ($admin) {
+            $roleIds = $admin->roles->pluck('id')->filter()->all();
+            if ($admin->_role && !in_array($admin->_role, $roleIds, true)) {
+                $roleIds[] = $admin->_role;
+            }
+
+            foreach ($roleIds as $roleId) {
+                foreach ($locales as $locale) {
+                    Cache::forget(self::CACHE_PREFIX . "user:{$userId}:role:{$roleId}:locale:{$locale}");
+                }
+            }
         }
 
         return true;
@@ -154,5 +167,23 @@ class MenuRepository implements MenuRepositoryInterface
         }
         $envTtl = (int) env('MENU_CACHE_TTL', self::CACHE_TTL);
         return $envTtl > 0 ? $envTtl : self::CACHE_TTL;
+    }
+
+    /**
+     * Determine supported locales for caching
+     */
+    protected function getSupportedLocales(): array
+    {
+        $configured = Config::get('menu_settings.locales');
+        if (is_array($configured) && !empty($configured)) {
+            return array_values(array_filter(array_map('trim', $configured)));
+        }
+
+        $envLocales = env('APP_LOCALES');
+        if ($envLocales) {
+            return array_values(array_filter(array_map('trim', explode(',', $envLocales))));
+        }
+
+        return ['uz', 'oz', 'ru', 'en'];
     }
 }

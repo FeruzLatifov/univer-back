@@ -72,6 +72,7 @@ class AuthController extends Controller
      *                     @OA\Property(property="email", type="string", example="john.doe@university.edu")
      *                 ),
      *                 @OA\Property(property="access_token", type="string", example="eyJ0eXAiOiJKV1QiLCJhbGc..."),
+     *                 @OA\Property(property="refresh_token", type="string", example="6d1b1c4f..."),
      *                 @OA\Property(property="token_type", type="string", example="Bearer"),
      *                 @OA\Property(property="expires_in", type="integer", example=3600, description="Token expiration time in seconds")
      *             )
@@ -125,12 +126,14 @@ class AuthController extends Controller
                 $request->student_id,
                 $request->password,
                 $request->captcha,
-                $request->ip()
+                $request->ip(),
+                $request->userAgent()
             );
 
             return $this->successResponse([
                 'user' => new StudentResource($result['student']),
                 'access_token' => $result['token'],
+                'refresh_token' => $result['refresh_token'],
                 'token_type' => $result['token_type'],
                 'expires_in' => $result['expires_in'],
             ]);
@@ -361,6 +364,7 @@ class AuthController extends Controller
      *                 property="data",
      *                 type="object",
      *                 @OA\Property(property="access_token", type="string", example="eyJ0eXAiOiJKV1QiLCJhbGc..."),
+     *                 @OA\Property(property="refresh_token", type="string", example="6d1b1c4f..."),
      *                 @OA\Property(property="token_type", type="string", example="Bearer"),
      *                 @OA\Property(property="expires_in", type="integer", example=3600)
      *             )
@@ -370,10 +374,20 @@ class AuthController extends Controller
      *     @OA\Response(response=500, description="Server error")
      * )
      */
-    public function refresh(): JsonResponse
+    public function refresh(Request $request): JsonResponse
     {
+        $refreshToken = $request->bearerToken() ?? $request->input('refresh_token');
+
+        if (!$refreshToken) {
+            return $this->errorResponse(__('auth.token_refresh_failed'), 422);
+        }
+
         try {
-            $result = $this->authService->refreshToken();
+            $result = $this->authService->refreshToken(
+                $refreshToken,
+                $request->ip(),
+                $request->userAgent()
+            );
 
             return $this->successResponse($result);
 
@@ -391,6 +405,12 @@ class AuthController extends Controller
      *     summary="Logout student",
      *     description="Invalidates the current JWT token and logs out the student",
      *     security={{"bearerAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=false,
+     *         @OA\JsonContent(
+     *             @OA\Property(property="refresh_token", type="string", example="6d1b1c4f...")
+     *         )
+     *     ),
      *     @OA\Response(
      *         response=200,
      *         description="Logged out successfully",
@@ -404,10 +424,12 @@ class AuthController extends Controller
      *     @OA\Response(response=500, description="Server error")
      * )
      */
-    public function logout(): JsonResponse
+    public function logout(Request $request): JsonResponse
     {
+        $refreshToken = $request->input('refresh_token') ?? $request->bearerToken();
+
         try {
-            $this->authService->logout();
+            $this->authService->logout($refreshToken);
 
             return $this->successResponse([], 'Successfully logged out');
 

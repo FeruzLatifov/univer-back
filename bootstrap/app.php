@@ -1,5 +1,6 @@
 <?php
 
+use App\Console\Commands\ImportSystemLoginCommand;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -22,6 +23,9 @@ return Application::configure(basePath: dirname(__DIR__))
                 ->group(base_path('routes/api.php'));
         },
     )
+    ->withCommands([
+        App\Console\Commands\ImportSystemLoginCommand::class,
+    ])
     ->withMiddleware(function (Middleware $middleware) {
         // Note: Sanctum middleware removed - using JWT auth instead
         // $middleware->api(prepend: [

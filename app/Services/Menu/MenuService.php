@@ -10,7 +10,6 @@ use App\Models\EAdmin;
 use App\Services\Translation\MultiTenantTranslationService;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
 
 /**
@@ -346,14 +345,6 @@ class MenuService implements MenuServiceInterface
 
         // Invalidate legacy keys (without role) via repository
         $this->menuRepository->invalidateMenuCache($user->id);
-
-        // Also invalidate role-scoped keys to avoid stale menus after role switch
-        $locales = ['uz', 'oz', 'ru', 'en'];
-        $roleId = $user->_role;
-        foreach ($locales as $locale) {
-            $cacheKey = 'menu:user:' . $user->id . ':role:' . $roleId . ':locale:' . $locale;
-            Cache::forget($cacheKey);
-        }
 
         return true;
     }

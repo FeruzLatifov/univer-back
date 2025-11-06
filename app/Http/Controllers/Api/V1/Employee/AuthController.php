@@ -4,12 +4,15 @@ namespace App\Http\Controllers\Api\V1\Employee;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\V1\AdminResource;
+use App\Models\AuthRefreshToken;
 use App\Models\EAdmin;
-use App\Models\PasswordResetToken;
-use App\Models\EEmployee;
 use App\Models\EAdminRole;
+use App\Models\EEmployee;
+use App\Models\PasswordResetToken;
 use App\Models\SystemLogin;
+use App\Services\Auth\RefreshTokenService;
 use App\Services\CaptchaService;
+use App\Services\Menu\MenuService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
@@ -24,6 +27,11 @@ use Illuminate\Support\Str;
  */
 class AuthController extends Controller
 {
+    public function __construct(
+        private readonly MenuService $menuService,
+        private readonly RefreshTokenService $refreshTokenService,
+    ) {}
+
     /**
      * @OA\Post(
      *     path="/api/v1/employee/auth/login",
@@ -51,6 +59,7 @@ class AuthController extends Controller
      *                 type="object",
      *                 @OA\Property(property="user", ref="#/components/schemas/AdminResource"),
      *                 @OA\Property(property="access_token", type="string", example="eyJ0eXAiOiJKV1QiLCJhbGc..."),
+     *                 @OA\Property(property="refresh_token", type="string", example="6d1b1c4f..."),
      *                 @OA\Property(property="token_type", type="string", example="bearer"),
      *                 @OA\Property(property="expires_in", type="integer", example=3600)
      *             )
@@ -111,7 +120,7 @@ class AuthController extends Controller
 
                 return response()->json([
                     'success' => false,
-                    'message' => 'CAPTCHA verification failed. Please try again.',
+                    'message' => __('auth.captcha_failed'),
                     'captcha_error' => $captchaService->getErrorMessage($captchaResult['error_codes'] ?? []),
                 ], 422);
             }
@@ -127,6 +136,27 @@ class AuthController extends Controller
         $login = trim($request->login);
         $this->debug('Login attempt (employee)', ['login' => $login]);
         $admin = null;
+
+        $maxAttempts = (int) env('AUTH_MAX_ATTEMPTS', 5);
+        $lockoutMinutes = (int) env('AUTH_LOCKOUT_MINUTES', 15);
+        $maxIpAttempts = (int) env('AUTH_MAX_ATTEMPTS_PER_IP', 20);
+
+        if ($maxAttempts > 0 && SystemLogin::isLockedOut($login, $maxAttempts, $lockoutMinutes)) {
+            return response()->json([
+                'success' => false,
+                'message' => __('auth.too_many_attempts', ['minutes' => $lockoutMinutes]),
+            ], 429);
+        }
+
+        if ($maxIpAttempts > 0) {
+            $ipAttempts = SystemLogin::getFailedAttemptsByIp($request->ip(), $lockoutMinutes);
+            if ($ipAttempts >= $maxIpAttempts) {
+                return response()->json([
+                    'success' => false,
+                    'message' => __('auth.too_many_attempts', ['minutes' => $lockoutMinutes]),
+                ], 429);
+            }
+        }
 
         // Yii2 behavior: if looks like EmployeeID (numeric, >9), resolve via e_employee.employee_id_number
         if (ctype_digit($login) && strlen($login) > 9) {
@@ -154,7 +184,7 @@ class AuthController extends Controller
             $this->debug('Employee inactive', ['admin_id' => $admin->id, 'employee_id' => $admin->employee->id]);
             return response()->json([
                 'success' => false,
-                'message' => 'Employee is not active. Please contact an administrator.',
+                'message' => __('auth.employee_inactive'),
             ], 403);
         }
 
@@ -162,7 +192,7 @@ class AuthController extends Controller
             $this->debug('Admin without employee link', ['admin_id' => $admin->id]);
             return response()->json([
                 'success' => false,
-                'message' => 'Employee not linked to account.',
+                'message' => __('auth.employee_not_linked'),
             ], 403);
         }
 
@@ -175,7 +205,7 @@ class AuthController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Login yoki parol noto\'g\'ri',
+                'message' => __('auth.invalid_credentials'),
             ], 401);
         }
 
@@ -214,7 +244,7 @@ class AuthController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Login yoki parol noto\'g\'ri',
+                'message' => __('auth.invalid_credentials'),
             ], 401);
         }
 
@@ -226,6 +256,13 @@ class AuthController extends Controller
             // Log successful login attempt
             SystemLogin::logSuccess($login, SystemLogin::TYPE_LOGIN, $admin->id);
 
+            $refreshToken = $this->refreshTokenService->createForUser(
+                $admin->id,
+                AuthRefreshToken::TYPE_EMPLOYEE,
+                $request->ip(),
+                $request->userAgent()
+            );
+
             $userResource = new AdminResource($admin);
             $this->debug('AdminResource created', ['admin_id' => $admin->id]);
 
@@ -234,6 +271,7 @@ class AuthController extends Controller
                 'data' => [
                     'user' => $userResource,
                     'access_token' => $token,
+                    'refresh_token' => $refreshToken,
                     'token_type' => 'bearer',
                     'expires_in' => config('jwt.ttl') * 60,
                 ],
@@ -260,7 +298,7 @@ class AuthController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Login yoki parol noto\'g\'ri',
+                'message' => __('auth.invalid_credentials'),
                 'debug' => app()->environment('local') ? [
                     'error' => $e->getMessage(),
                     'trace' => $e->getTraceAsString(),
@@ -397,7 +435,7 @@ class AuthController extends Controller
         if (!$admin) {
             return response()->json([
                 'success' => false,
-                'message' => 'Employee topilmadi',
+                'message' => __('auth.user_not_found'),
             ], 404);
         }
 
@@ -453,6 +491,7 @@ class AuthController extends Controller
      *                 property="data",
      *                 type="object",
      *                 @OA\Property(property="access_token", type="string", example="eyJ0eXAiOiJKV1QiLCJhbGc..."),
+     *                 @OA\Property(property="refresh_token", type="string", example="6d1b1c4f..."),
      *                 @OA\Property(property="token_type", type="string", example="bearer"),
      *                 @OA\Property(property="expires_in", type="integer", example=3600)
      *             )
@@ -468,25 +507,59 @@ class AuthController extends Controller
      *     )
      * )
      */
-    public function refresh()
+    public function refresh(Request $request)
     {
-        try {
-            $token = auth('employee-api')->refresh();
+        $refreshToken = $request->bearerToken() ?? $request->input('refresh_token');
 
-            return response()->json([
-                'success' => true,
-                'data' => [
-                    'access_token' => $token,
-                    'token_type' => 'bearer',
-                    'expires_in' => config('jwt.ttl') * 60,
-                ],
-            ]);
-        } catch (\Exception $e) {
+        if (!$refreshToken) {
             return response()->json([
                 'success' => false,
-                'message' => 'Token refresh failed',
+                'message' => __('auth.token_refresh_failed'),
+            ], 422);
+        }
+
+        $record = $this->refreshTokenService->findValid($refreshToken, AuthRefreshToken::TYPE_EMPLOYEE);
+
+        if (!$record) {
+            return response()->json([
+                'success' => false,
+                'message' => __('auth.token_refresh_failed'),
             ], 401);
         }
+
+        $admin = EAdmin::query()
+            ->where('id', $record->user_id)
+            ->where('status', 'enable')
+            ->with($this->withRelations())
+            ->first();
+
+        if (!$admin) {
+            $this->refreshTokenService->revokeByToken($refreshToken, AuthRefreshToken::TYPE_EMPLOYEE);
+            return response()->json([
+                'success' => false,
+                'message' => __('auth.user_not_found'),
+            ], 401);
+        }
+
+        $token = auth('employee-api')->login($admin);
+
+        $newRefreshToken = $this->refreshTokenService->rotate(
+            $record,
+            $request->ip(),
+            $request->userAgent()
+        );
+
+        SystemLogin::logSuccess($admin->login, SystemLogin::TYPE_REFRESH, $admin->id);
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'access_token' => $token,
+                'refresh_token' => $newRefreshToken,
+                'token_type' => 'bearer',
+                'expires_in' => config('jwt.ttl') * 60,
+            ],
+        ]);
     }
 
     /**
@@ -497,6 +570,12 @@ class AuthController extends Controller
      *     operationId="employeeLogout",
      *     tags={"Employee - Authentication"},
      *     security={{"bearerAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=false,
+     *         @OA\JsonContent(
+     *             @OA\Property(property="refresh_token", type="string", example="6d1b1c4f...")
+     *         )
+     *     ),
      *     @OA\Response(
      *         response=200,
      *         description="Logout successful",
@@ -515,9 +594,16 @@ class AuthController extends Controller
      *     )
      * )
      */
-    public function logout()
+    public function logout(Request $request)
     {
+        $refreshToken = $request->input('refresh_token') ?? $request->bearerToken();
+
         try {
+            $admin = auth('employee-api')->user();
+            if ($admin) {
+                SystemLogin::logSuccess($admin->login, SystemLogin::TYPE_LOGOUT, $admin->id);
+            }
+
             auth('employee-api')->logout();
 
             return response()->json([
@@ -527,8 +613,14 @@ class AuthController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Logout failed',
+                'message' => __('auth.logout_failed'),
             ], 500);
+        } finally {
+            if ($refreshToken) {
+                $this->refreshTokenService->revokeByToken($refreshToken, AuthRefreshToken::TYPE_EMPLOYEE);
+            } elseif (isset($admin)) {
+                $this->refreshTokenService->revokeAllForUser($admin->id, AuthRefreshToken::TYPE_EMPLOYEE);
+            }
         }
     }
 
@@ -631,10 +723,19 @@ class AuthController extends Controller
         $admin->_role = $role->id;
         $admin->save();
 
+        // Invalidate menu cache for all roles/locales
+        $this->menuService->invalidateUserMenuCache($admin);
+
         $admin->load($this->withRelations());
 
         // Issue fresh token with updated claims
         $token = auth('employee-api')->login($admin);
+        $refreshToken = $this->refreshTokenService->createForUser(
+            $admin->id,
+            AuthRefreshToken::TYPE_EMPLOYEE,
+            $request->ip(),
+            $request->userAgent()
+        );
 
         return response()->json([
             'success' => true,
@@ -642,6 +743,7 @@ class AuthController extends Controller
             'data' => [
                 'user' => new AdminResource($admin),
                 'access_token' => $token,
+                'refresh_token' => $refreshToken,
                 'token_type' => 'bearer',
                 'expires_in' => config('jwt.ttl') * 60,
             ],
@@ -820,7 +922,7 @@ class AuthController extends Controller
         if (!$admin) {
             return response()->json([
                 'success' => false,
-                'message' => 'Employee topilmadi',
+                'message' => __('auth.user_not_found'),
             ], 404);
         }
 
@@ -931,7 +1033,7 @@ class AuthController extends Controller
         if (!$admin) {
             return response()->json([
                 'success' => false,
-                'message' => 'Employee topilmadi',
+                'message' => __('auth.user_not_found'),
             ], 404);
         }
 

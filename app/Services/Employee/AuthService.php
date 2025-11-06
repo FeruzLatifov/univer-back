@@ -21,7 +21,7 @@ class AuthService
         if ($this->captchaService->isEnabled()) {
             $result = $this->captchaService->verify($captcha, $ipAddress, 'employee_login');
             if (!$result['success']) {
-                throw new \Exception('CAPTCHA verification failed');
+                throw new \Exception(__('auth.captcha_failed'));
             }
         }
         
@@ -29,7 +29,7 @@ class AuthService
         $admin = $this->findAdmin($login);
         
         if (!$admin || !Hash::check($password, $admin->password)) {
-            throw new \Exception('Login yoki parol noto\'g\'ri');
+            throw new \Exception(__('auth.invalid_credentials'));
         }
         
         // Generate token

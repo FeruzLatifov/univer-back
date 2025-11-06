@@ -8,8 +8,8 @@ use App\Models\Translation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
-use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Session;
 
 /**
  * Language Controller
@@ -69,7 +69,7 @@ class LanguageController extends Controller
         if (!$language) {
             return response()->json([
                 'success' => false,
-                'message' => 'Current language not found',
+                'message' => __('language.not_found'),
             ], 404);
         }
 
@@ -111,7 +111,7 @@ class LanguageController extends Controller
         if (!$language) {
             return response()->json([
                 'success' => false,
-                'message' => 'Language not found or inactive',
+                'message' => __('language.not_found'),
             ], 404);
         }
 
@@ -121,9 +121,11 @@ class LanguageController extends Controller
         // Store in session for subsequent requests
         Session::put('locale', $locale);
 
+        $this->persistUserPreference($locale);
+
         return response()->json([
             'success' => true,
-            'message' => 'Language changed successfully',
+            'message' => __('language.change_success'),
             'data' => [
                 'locale' => $locale,
                 'name' => $language->name,
@@ -143,6 +145,21 @@ class LanguageController extends Controller
     }
 
     /**
+     * Persist user language preference if authenticated
+     */
+    protected function persistUserPreference(string $locale): void
+    {
+        $fullLocale = $this->mapShortToFull($locale);
+
+        $admin = auth('employee-api')->user() ?? auth('admin-api')->user();
+        if ($admin && $admin->language !== $fullLocale) {
+            $admin->language = $fullLocale;
+            $admin->save();
+        }
+
+    }
+
+    /**
      * Get language by code
      *
      * @param string $code
@@ -155,7 +172,7 @@ class LanguageController extends Controller
         if (!$language) {
             return response()->json([
                 'success' => false,
-                'message' => 'Language not found',
+                'message' => __('language.not_found'),
             ], 404);
         }
 
@@ -184,7 +201,7 @@ class LanguageController extends Controller
         $cacheKey = 'frontend_translations';
 
         // Cache for 1 hour
-        $translations = Cache::remember($cacheKey, 3600, function () {
+            $translations = Cache::remember($cacheKey, 3600, function () {
             $allowedLocales = $this->getAllowedLocales();
 
             // Get all active languages
@@ -219,5 +236,20 @@ class LanguageController extends Controller
             'success' => true,
             'data' => $translations,
         ]);
+    }
+
+    /**
+     * Map short locale code (uz) to full locale code (uz-UZ)
+     */
+    protected function mapShortToFull(string $locale): string
+    {
+        $map = [
+            'uz' => 'uz-UZ',
+            'oz' => 'oz-UZ',
+            'ru' => 'ru-RU',
+            'en' => 'en-US',
+        ];
+
+        return $map[$locale] ?? $locale;
     }
 }

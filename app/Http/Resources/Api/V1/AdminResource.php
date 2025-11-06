@@ -58,6 +58,8 @@ class AdminResource extends JsonResource
             }
         }
 
+        $languageShort = $this->mapLanguageToShort($this->language);
+
         return [
             'id' => $this->id,
             'type' => 'admin',
@@ -65,6 +67,7 @@ class AdminResource extends JsonResource
             'full_name' => $this->full_name,
             'email' => $this->email,
             'phone' => $this->telephone,
+            'language' => $languageShort,
             'role' => $activeRole?->code ?? ($activeRole?->id ? (string) $activeRole->id : ($this->_role ? (string) $this->_role : null)),
             'role_id' => $activeRole?->id ?? $this->_role,
             'role_code' => $activeRole?->code,
@@ -94,5 +97,21 @@ class AdminResource extends JsonResource
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
         ];
+    }
+
+    private function mapLanguageToShort(?string $language): ?string
+    {
+        if (!$language) {
+            return app()->getLocale();
+        }
+
+        $map = [
+            'uz-UZ' => 'uz',
+            'oz-UZ' => 'oz',
+            'ru-RU' => 'ru',
+            'en-US' => 'en',
+        ];
+
+        return $map[$language] ?? $language;
     }
 }

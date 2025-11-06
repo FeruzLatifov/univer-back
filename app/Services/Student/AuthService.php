@@ -2,9 +2,11 @@
 
 namespace App\Services\Student;
 
+use App\Models\AuthRefreshToken;
 use App\Models\EStudent;
 use App\Models\PasswordResetToken;
 use App\Models\SystemLogin;
+use App\Services\Auth\RefreshTokenService;
 use App\Services\CaptchaService;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -24,11 +26,10 @@ use Illuminate\Support\Str;
  */
 class AuthService
 {
-    private CaptchaService $captchaService;
-
-    public function __construct(CaptchaService $captchaService)
-    {
-        $this->captchaService = $captchaService;
+    public function __construct(
+        private CaptchaService $captchaService,
+        private RefreshTokenService $refreshTokenService,
+    ) {
     }
 
     /**
@@ -41,8 +42,23 @@ class AuthService
      * @return array
      * @throws \Exception
      */
-    public function attemptLogin(string $studentId, string $password, ?string $captcha, string $ipAddress): array
+    public function attemptLogin(string $studentId, string $password, ?string $captcha, string $ipAddress, ?string $userAgent = null): array
     {
+        $maxAttempts = (int) env('AUTH_MAX_ATTEMPTS', 5);
+        $lockoutMinutes = (int) env('AUTH_LOCKOUT_MINUTES', 15);
+        $maxIpAttempts = (int) env('AUTH_MAX_ATTEMPTS_PER_IP', 20);
+
+        if ($maxAttempts > 0 && SystemLogin::isLockedOut($studentId, $maxAttempts, $lockoutMinutes)) {
+            throw new \Exception(__('auth.too_many_attempts', ['minutes' => $lockoutMinutes]));
+        }
+
+        if ($maxIpAttempts > 0) {
+            $ipAttempts = SystemLogin::getFailedAttemptsByIp($ipAddress, $lockoutMinutes);
+            if ($ipAttempts >= $maxIpAttempts) {
+                throw new \Exception(__('auth.too_many_attempts', ['minutes' => $lockoutMinutes]));
+            }
+        }
+
         // CAPTCHA verification
         if ($this->captchaService->isEnabled()) {
             $captchaResult = $this->captchaService->verify($captcha, $ipAddress, 'student_login');
@@ -55,8 +71,11 @@ class AuthService
                     'error_codes' => $captchaResult['error_codes'] ?? [],
                 ]);
 
-                throw new \Exception('CAPTCHA verification failed: ' .
-                    $this->captchaService->getErrorMessage($captchaResult['error_codes'] ?? []));
+                throw new \Exception(
+                    __('auth.captcha_failed_with_reason', [
+                        'reason' => $this->captchaService->getErrorMessage($captchaResult['error_codes'] ?? []),
+                    ])
+                );
             }
 
             logger()->info('Student login CAPTCHA passed', [
@@ -75,7 +94,7 @@ class AuthService
         // Check password
         if (!$student || !Hash::check($password, $student->password)) {
             SystemLogin::logFailure($studentId, SystemLogin::TYPE_LOGIN);
-            throw new \Exception('Student ID yoki parol noto\'g\'ri');
+            throw new \Exception(__('auth.invalid_student_credentials'));
         }
 
         // Check student status
@@ -84,25 +103,33 @@ class AuthService
             $blockedStatuses = ['13', '15']; // 13: Expelled, 15: Dropped out
             if (in_array($meta->_student_status, $blockedStatuses)) {
                 $statusMessages = [
-                    '13' => 'O\'qishdan chetlashtirilgan',
-                    '15' => 'O\'qishni to\'xtatgan',
+                    '13' => __('auth.student_status_expelled'),
+                    '15' => __('auth.student_status_dropout'),
                 ];
-                $statusName = $statusMessages[$meta->_student_status] ?? 'Noma\'lum';
+                $statusName = $statusMessages[$meta->_student_status] ?? __('auth.status_unknown');
 
                 SystemLogin::logFailure($studentId, SystemLogin::TYPE_LOGIN);
-                throw new \Exception("Sizning statusingiz: {$statusName}. Tizimga kirish mumkin emas.");
+                throw new \Exception(__('auth.status_blocked', ['status' => $statusName]));
             }
         }
 
-        // Generate token
+        // Generate tokens
         $token = auth('student-api')->login($student);
 
         // Log successful login
         SystemLogin::logSuccess($studentId, SystemLogin::TYPE_LOGIN, $student->id);
 
+        $refreshToken = $this->refreshTokenService->createForUser(
+            $student->id,
+            AuthRefreshToken::TYPE_STUDENT,
+            $ipAddress,
+            $userAgent
+        );
+
         return [
             'student' => $student,
             'token' => $token,
+            'refresh_token' => $refreshToken,
             'token_type' => 'bearer',
             'expires_in' => config('jwt.ttl') * 60,
         ];
@@ -114,19 +141,40 @@ class AuthService
      * @return array
      * @throws \Exception
      */
-    public function refreshToken(): array
+    public function refreshToken(string $refreshToken, string $ipAddress, ?string $userAgent = null): array
     {
-        try {
-            $token = auth('student-api')->refresh();
+        $record = $this->refreshTokenService->findValid($refreshToken, AuthRefreshToken::TYPE_STUDENT);
 
-            return [
-                'access_token' => $token,
-                'token_type' => 'bearer',
-                'expires_in' => config('jwt.ttl') * 60,
-            ];
-        } catch (\Exception $e) {
-            throw new \Exception('Token refresh failed');
+        if (!$record) {
+            throw new \Exception(__('auth.token_refresh_failed'));
         }
+
+        $student = EStudent::where('id', $record->user_id)
+            ->where('active', true)
+            ->with('meta.specialty', 'meta.group')
+            ->first();
+
+        if (!$student) {
+            $this->refreshTokenService->revokeByToken($refreshToken, AuthRefreshToken::TYPE_STUDENT);
+            throw new \Exception(__('auth.user_not_found'));
+        }
+
+        $accessToken = auth('student-api')->login($student);
+
+        $newRefreshToken = $this->refreshTokenService->rotate(
+            $record,
+            $ipAddress,
+            $userAgent
+        );
+
+        SystemLogin::logSuccess($student->student_id_number, SystemLogin::TYPE_REFRESH, $student->id);
+
+        return [
+            'access_token' => $accessToken,
+            'refresh_token' => $newRefreshToken,
+            'token_type' => 'bearer',
+            'expires_in' => config('jwt.ttl') * 60,
+        ];
     }
 
     /**
@@ -135,12 +183,23 @@ class AuthService
      * @return void
      * @throws \Exception
      */
-    public function logout(): void
+    public function logout(?string $refreshToken = null): void
     {
         try {
+            $student = auth('student-api')->user();
+            if ($student) {
+                SystemLogin::logSuccess($student->student_id_number, SystemLogin::TYPE_LOGOUT, $student->id);
+            }
+
             auth('student-api')->logout();
         } catch (\Exception $e) {
-            throw new \Exception('Logout failed');
+            throw new \Exception(__('auth.logout_failed'));
+        } finally {
+            if ($refreshToken) {
+                $this->refreshTokenService->revokeByToken($refreshToken, AuthRefreshToken::TYPE_STUDENT);
+            } elseif (isset($student)) {
+                $this->refreshTokenService->revokeAllForUser($student->id, AuthRefreshToken::TYPE_STUDENT);
+            }
         }
     }
 
@@ -154,7 +213,7 @@ class AuthService
     public function requestPasswordReset(?string $email, ?string $login): array
     {
         if (!$email && !$login) {
-            throw new \Exception('Email yoki Student ID talab qilinadi');
+            throw new \Exception(__('auth.email_or_student_id_required'));
         }
 
         // Find student by email or student_id_number
@@ -169,7 +228,7 @@ class AuthService
         if (!$student) {
             // Don't reveal if email exists (security best practice)
             return [
-                'message' => 'Agar email topilsa, parolni tiklash uchun havola yuboriladi',
+                'message' => __('auth.reset_link_email_notice'),
             ];
         }
 
@@ -177,7 +236,7 @@ class AuthService
         $studentEmail = $email ?? $student->email;
         if (!$studentEmail) {
             return [
-                'message' => 'Agar maʼlumot topilsa, parolni tiklash uchun havola yuboriladi',
+                'message' => __('auth.reset_link_generic_notice'),
             ];
         }
 
@@ -207,7 +266,7 @@ class AuthService
         ]);
 
         return [
-            'message' => 'Parolni tiklash uchun havola emailingizga yuborildi',
+            'message' => __('auth.reset_link_success'),
             'debug' => app()->environment('local') ? [
                 'token' => $token,
                 'reset_link' => $resetLink,
@@ -234,7 +293,7 @@ class AuthService
             ->first();
 
         if (!$resetToken) {
-            throw new \Exception('Token noto\'g\'ri yoki muddati tugagan');
+            throw new \Exception(__('auth.reset_token_invalid'));
         }
 
         // Find student
@@ -243,7 +302,7 @@ class AuthService
             ->first();
 
         if (!$student) {
-            throw new \Exception('Foydalanuvchi topilmadi');
+            throw new \Exception(__('auth.user_not_found'));
         }
 
         // Update password

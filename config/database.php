@@ -5,6 +5,7 @@ use Illuminate\Support\Str;
 return [
 
     'default' => env('DB_CONNECTION', 'pgsql'),
+    'legacy_connection' => env('LEGACY_DB_CONNECTION'),
 
     'connections' => [
 

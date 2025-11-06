@@ -69,8 +69,47 @@ return array (
         ),
       ),
     ),
-    'employee' => 
+    'archive' =>
     array (
+      'icon' => 'archive',
+      'label' => 'Archive',
+      'url' => '/archive/academic-sheet',
+      'permission' => 'archive.view',
+      'order' => 4,
+      'items' =>
+      array (
+        'archive/academic-sheet' =>
+        array (
+          'label' => 'Archive Academic Sheet',
+          'url' => '/archive/academic-sheet',
+          'icon' => 'table',
+          'permission' => 'archive/academic-sheet',
+        ),
+        'archive/circulation-sheet' =>
+        array (
+          'label' => 'Archive Circulation Sheet',
+          'url' => '/archive/circulation-sheet',
+          'icon' => 'file-text',
+          'permission' => 'archive/circulation-sheet',
+        ),
+        'archive/circulation-sheet-check' =>
+        array (
+          'label' => 'Archive Circulation Sheet Check',
+          'url' => '/archive/circulation-sheet-check',
+          'icon' => 'check-check',
+          'permission' => 'archive/circulation-sheet-check',
+        ),
+        'archive/call-sheet' =>
+        array (
+          'label' => 'Call Sheet',
+          'url' => '/archive/call-sheet',
+          'icon' => 'phone',
+          'permission' => 'archive/call-sheet',
+        ),
+      ),
+    ),
+        'employee' => 
+        array (
       'icon' => 'briefcase',
       'label' => 'Employee Information',
       'url' => '/employee/employee',
@@ -1154,6 +1193,34 @@ return array (
           'url' => '/archive/certificate',
           'icon' => 'award',
           'permission' => 'archive.certificate.view',
+        ),
+        'archive/academic-sheet' =>
+        array (
+          'label' => 'Archive Academic Sheet',
+          'url' => '/archive/academic-sheet',
+          'icon' => 'table',
+          'permission' => 'archive/academic-sheet',
+        ),
+        'archive/circulation-sheet' =>
+        array (
+          'label' => 'Archive Circulation Sheet',
+          'url' => '/archive/circulation-sheet',
+          'icon' => 'file-text',
+          'permission' => 'archive/circulation-sheet',
+        ),
+        'archive/circulation-sheet-check' =>
+        array (
+          'label' => 'Archive Circulation Sheet Check',
+          'url' => '/archive/circulation-sheet-check',
+          'icon' => 'check-check',
+          'permission' => 'archive/circulation-sheet-check',
+        ),
+        'archive/call-sheet' =>
+        array (
+          'label' => 'Call Sheet',
+          'url' => '/archive/call-sheet',
+          'icon' => 'phone',
+          'permission' => 'archive/call-sheet',
         ),
       ),
     ),

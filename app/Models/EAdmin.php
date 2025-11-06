@@ -34,6 +34,7 @@ class EAdmin extends Authenticatable implements JWTSubject
         '_employee',
         '_role',
         'status',
+        'language',
     ];
 
     protected $hidden = [
