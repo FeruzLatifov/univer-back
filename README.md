@@ -131,11 +131,13 @@ HEMIS is a complete university management solution that handles:
 
 Comprehensive documentation is available in the `/docs` directory:
 
+- **[📖 Documentation Index](docs/README.md)** - Complete documentation navigation guide
 - **[Architecture Guide](docs/ARCHITECTURE.md)** - System architecture and design patterns
 - **[Security Guide](docs/SECURITY.md)** - Security measures and best practices
 - **[Performance Guide](docs/PERFORMANCE.md)** - Optimization strategies and caching
 - **[Testing Guide](docs/TESTING.md)** - Testing strategy and best practices
 - **[Deployment Guide](docs/DEPLOYMENT.md)** - Production deployment instructions
+- **[Implementation Summary](docs/IMPLEMENTATION_SUMMARY.md)** - Complete implementation details
 - **[Project Analysis](PROJECT_ANALYSIS_UZ.md)** - Detailed project analysis (Uzbek)
 
 ### API Documentation
