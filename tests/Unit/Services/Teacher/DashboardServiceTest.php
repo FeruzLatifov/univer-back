@@ -7,7 +7,7 @@ use App\Models\EGrade;
 use App\Models\EStudent;
 use App\Models\ESubjectSchedule;
 use App\Services\Teacher\DashboardService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\TestCase;
 
 /**
@@ -21,7 +21,7 @@ use Tests\TestCase;
  */
 class DashboardServiceTest extends TestCase
 {
-    use RefreshDatabase;
+    use DatabaseTransactions;
 
     protected DashboardService $dashboardService;
 

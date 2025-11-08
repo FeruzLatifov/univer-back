@@ -5,7 +5,7 @@ namespace Tests\Unit\Services\Student;
 use App\Models\EStudent;
 use App\Models\ESubjectSchedule;
 use App\Services\Student\DashboardService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\TestCase;
 
 /**
@@ -19,7 +19,7 @@ use Tests\TestCase;
  */
 class DashboardServiceTest extends TestCase
 {
-    use RefreshDatabase;
+    use DatabaseTransactions;
 
     protected DashboardService $dashboardService;
 
@@ -36,7 +36,7 @@ class DashboardServiceTest extends TestCase
     {
         $student = EStudent::factory()->create();
         
-        $result = $this->dashboardService->getDashboardData($student->id);
+        $result = $this->dashboardService->getDashboardData($student);
 
         $this->assertIsArray($result);
         $this->assertArrayHasKey('student_info', $result);
@@ -52,7 +52,7 @@ class DashboardServiceTest extends TestCase
     {
         $student = EStudent::factory()->create();
         
-        $result = $this->dashboardService->getDashboardData($student->id);
+        $result = $this->dashboardService->getDashboardData($student);
         $summary = $result['academic_summary'];
 
         $this->assertArrayHasKey('gpa', $summary);
@@ -71,7 +71,7 @@ class DashboardServiceTest extends TestCase
             'student_id_number' => 'ST12345',
         ]);
         
-        $result = $this->dashboardService->getDashboardData($student->id);
+        $result = $this->dashboardService->getDashboardData($student);
         $studentInfo = $result['student_info'];
 
         $this->assertEquals('Test Student', $studentInfo['name']);
@@ -85,7 +85,7 @@ class DashboardServiceTest extends TestCase
     {
         $student = EStudent::factory()->create();
         
-        $result = $this->dashboardService->getDashboardData($student->id);
+        $result = $this->dashboardService->getDashboardData($student);
 
         $this->assertIsArray($result['upcoming_classes']);
     }
@@ -97,7 +97,7 @@ class DashboardServiceTest extends TestCase
     {
         $student = EStudent::factory()->create();
         
-        $result = $this->dashboardService->getDashboardData($student->id);
+        $result = $this->dashboardService->getDashboardData($student);
 
         $this->assertIsArray($result['recent_grades']);
     }

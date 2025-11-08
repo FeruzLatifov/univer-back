@@ -7,7 +7,7 @@ use App\Models\EStudent;
 use App\Models\ESubject;
 use App\Models\ESubjectSchedule;
 use App\Services\Teacher\GradeService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\TestCase;
 
 /**
@@ -21,7 +21,7 @@ use Tests\TestCase;
  */
 class GradeServiceTest extends TestCase
 {
-    use RefreshDatabase;
+    use DatabaseTransactions;
 
     protected GradeService $gradeService;
 

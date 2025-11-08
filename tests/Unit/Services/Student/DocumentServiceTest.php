@@ -5,7 +5,7 @@ namespace Tests\Unit\Services\Student;
 use App\Models\EDocument;
 use App\Models\EStudent;
 use App\Services\Student\DocumentService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -21,7 +21,7 @@ use Tests\TestCase;
  */
 class DocumentServiceTest extends TestCase
 {
-    use RefreshDatabase;
+    use DatabaseTransactions;
 
     protected DocumentService $documentService;
 

@@ -8,7 +8,7 @@ use App\Models\ESubject;
 use App\Models\ESubjectSchedule;
 use App\Services\Teacher\AttendanceService;
 use Carbon\Carbon;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\TestCase;
 
 /**
@@ -22,7 +22,7 @@ use Tests\TestCase;
  */
 class AttendanceServiceTest extends TestCase
 {
-    use RefreshDatabase;
+    use DatabaseTransactions;
 
     protected AttendanceService $attendanceService;
 
