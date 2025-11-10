@@ -27,7 +27,7 @@ return [
     ],
 
     'migrations' => [
-        'table' => 'migrations',
+        'table' => 'laravel_migrations', // Yii2 'migration' bilan to'qnashmaslik uchun
         'update_date_on_publish' => true,
     ],
 

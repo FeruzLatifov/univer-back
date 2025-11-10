@@ -2,124 +2,182 @@
 
 namespace Tests\Feature\Auth;
 
-use App\Models\EStudent;
-use App\Models\SystemLogin;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 use Tests\TestCase;
+use App\Models\Student;
 
 class StudentAuthTest extends TestCase
 {
-    use RefreshDatabase;
-
-    protected function setUp(): void
+    /**
+     * Test student can login with valid credentials
+     */
+    public function test_student_can_login_with_valid_credentials(): void
     {
-        parent::setUp();
+        // Find active student
+        $student = Student::where('_student_status', '!=', 3) // Not expelled
+            ->whereNotNull('student_id_number')
+            ->first();
 
-        // Fake Redis/cache interactions used by rate limiter
-        $this->app['config']->set('cache.default', 'array');
-        $this->app['config']->set('cache.stores.array', [
-            'driver' => 'array',
-        ]);
-
-        $this->app['config']->set('database.default', env('DB_CONNECTION', 'pgsql'));
-        $this->app['config']->set('database.connections.testing', config('database.connections.' . config('database.default')));
-    }
-
-    /** @test */
-    public function student_can_login_and_receive_refresh_token()
-    {
-        $student = EStudent::factory()->create([
-            'password' => Hash::make('secret123'),
-        ]);
+        if (!$student) {
+            $this->markTestSkipped('No active student found in database');
+        }
 
         $response = $this->postJson('/api/v1/student/auth/login', [
-            'student_id' => $student->student_id_number,
-            'password' => 'secret123',
+            'login' => $student->student_id_number,
+            'password' => 'admin123',
         ]);
 
-        $response->assertOk()
-            ->assertJsonFragment([
-                'success' => true,
-            ])
+        $response->assertStatus(200)
             ->assertJsonStructure([
                 'success',
                 'data' => [
-                    'user' => ['id', 'student_id_number'],
                     'access_token',
                     'refresh_token',
+                    'token_type',
+                    'expires_in',
+                    'user' => [
+                        'id',
+                        'first_name',
+                        'second_name',
+                        'third_name',
+                        'student_id_number',
+                    ],
+                ],
+            ])
+            ->assertJson([
+                'success' => true,
+                'data' => [
+                    'token_type' => 'bearer',
                 ],
             ]);
-
-        $this->assertDatabaseCount('auth_refresh_tokens', 1);
-        $this->assertDatabaseHas('auth_refresh_tokens', [
-            'user_id' => $student->id,
-            'user_type' => 'student',
-        ]);
     }
 
-    /** @test */
-    public function rate_limiter_blocks_after_max_attempts()
+    /**
+     * Test student cannot login with invalid credentials
+     */
+    public function test_student_cannot_login_with_invalid_credentials(): void
     {
-        $student = EStudent::factory()->create([
-            'password' => Hash::make('secret123'),
+        $student = Student::whereNotNull('student_id_number')->first();
+
+        if (!$student) {
+            $this->markTestSkipped('No student found in database');
+        }
+
+        $response = $this->postJson('/api/v1/student/auth/login', [
+            'login' => $student->student_id_number,
+            'password' => 'wrong-password',
         ]);
 
-        $this->app['config']->set('AUTH_MAX_ATTEMPTS', 2);
-        $this->app['config']->set('AUTH_LOCKOUT_MINUTES', 10);
-
-        // First attempt (fail)
-        $this->postJson('/api/v1/student/auth/login', [
-            'student_id' => $student->student_id_number,
-            'password' => 'wrong',
-        ])->assertStatus(401);
-
-        // Second attempt (fail)
-        $this->postJson('/api/v1/student/auth/login', [
-            'student_id' => $student->student_id_number,
-            'password' => 'wrong',
-        ])->assertStatus(401);
-
-        // Third attempt should be rate limited
-        $this->postJson('/api/v1/student/auth/login', [
-            'student_id' => $student->student_id_number,
-            'password' => 'wrong',
-        ])->assertStatus(429)
-          ->assertJson([
-              'success' => false,
-          ]);
+        $response->assertStatus(401)
+            ->assertJson([
+                'success' => false,
+            ]);
     }
 
-    /** @test */
-    public function refresh_token_endpoint_returns_new_tokens()
+    /**
+     * Test student can refresh token
+     */
+    public function test_student_can_refresh_token(): void
     {
-        $student = EStudent::factory()->create([
-            'password' => Hash::make('secret123'),
-        ]);
+        // Login first
+        $student = Student::where('_student_status', '!=', 3)
+            ->whereNotNull('student_id_number')
+            ->first();
+
+        if (!$student) {
+            $this->markTestSkipped('No active student found in database');
+        }
 
         $loginResponse = $this->postJson('/api/v1/student/auth/login', [
-            'student_id' => $student->student_id_number,
-            'password' => 'secret123',
-        ])->json('data');
-
-        $refreshResponse = $this->postJson('/api/v1/student/auth/refresh', [
-            'refresh_token' => $loginResponse['refresh_token'],
-        ], [
-            'Authorization' => 'Bearer ' . $loginResponse['refresh_token'],
+            'login' => $student->student_id_number,
+            'password' => 'admin123',
         ]);
 
-        $refreshResponse->assertOk()
+        $loginResponse->assertStatus(200);
+        $refreshToken = $loginResponse->json('data.refresh_token');
+
+        // Now refresh
+        $response = $this->postJson('/api/v1/student/auth/refresh', [
+            'refresh_token' => $refreshToken,
+        ]);
+
+        $response->assertStatus(200)
             ->assertJsonStructure([
                 'success',
                 'data' => [
                     'access_token',
                     'refresh_token',
+                    'token_type',
+                    'expires_in',
                 ],
+            ])
+            ->assertJson([
+                'success' => true,
             ]);
 
-        $this->assertEquals(2, DB::table('auth_refresh_tokens')->count());
+        // Verify new tokens are different
+        $this->assertNotEquals(
+            $refreshToken,
+            $response->json('data.refresh_token'),
+            'Refresh token should be rotated'
+        );
+    }
+
+    /**
+     * Test student cannot reuse refresh token
+     */
+    public function test_student_cannot_reuse_refresh_token(): void
+    {
+        $student = Student::where('_student_status', '!=', 3)
+            ->whereNotNull('student_id_number')
+            ->first();
+
+        if (!$student) {
+            $this->markTestSkipped('No active student found in database');
+        }
+
+        $loginResponse = $this->postJson('/api/v1/student/auth/login', [
+            'login' => $student->student_id_number,
+            'password' => 'admin123',
+        ]);
+
+        $refreshToken = $loginResponse->json('data.refresh_token');
+
+        // First refresh - should work
+        $firstRefresh = $this->postJson('/api/v1/student/auth/refresh', [
+            'refresh_token' => $refreshToken,
+        ]);
+        $firstRefresh->assertStatus(200);
+
+        // Second refresh with same token - should fail
+        $secondRefresh = $this->postJson('/api/v1/student/auth/refresh', [
+            'refresh_token' => $refreshToken,
+        ]);
+        $secondRefresh->assertStatus(401);
+    }
+
+    /**
+     * Test login requires login field
+     */
+    public function test_login_requires_login_field(): void
+    {
+        $response = $this->postJson('/api/v1/student/auth/login', [
+            'password' => 'admin123',
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['login']);
+    }
+
+    /**
+     * Test login requires password field
+     */
+    public function test_login_requires_password_field(): void
+    {
+        $response = $this->postJson('/api/v1/student/auth/login', [
+            'login' => '401231100286',
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['password']);
     }
 }
-

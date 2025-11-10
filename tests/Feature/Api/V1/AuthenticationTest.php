@@ -4,9 +4,7 @@ namespace Tests\Feature\Api\V1;
 
 use App\Models\EAdmin;
 use App\Models\EStudent;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Foundation\Testing\WithFaker;
-use Illuminate\Support\Facades\Hash;
+use Tests\SeedsTestData;
 use Tests\TestCase;
 
 /**
@@ -14,27 +12,25 @@ use Tests\TestCase;
  *
  * Best Practice: Test all authentication flows
  * Coverage: Login, logout, refresh, me endpoints for both staff and students
+ *
+ * Uses seeded test data from TestUsersSeeder:
+ * - Admin: login=test_admin, password=admin123
+ * - Student: student_id=TEST001, password=student123
+ * - Inactive Admin: login=inactive_admin, password=admin123
  */
 class AuthenticationTest extends TestCase
 {
-    use RefreshDatabase, WithFaker;
+    use SeedsTestData;
 
     /**
      * Test employee login with valid credentials
      */
     public function test_employee_can_login_with_valid_credentials(): void
     {
-        // Create a test admin
-        $admin = EAdmin::factory()->create([
-            'login' => 'testadmin',
-            'password' => Hash::make('password123'),
-            'active' => true,
-        ]);
-
-        // Attempt login
+        // Use seeded test admin
         $response = $this->postJson('/api/v1/employee/auth/login', [
-            'login' => 'testadmin',
-            'password' => 'password123',
+            'login' => 'test_admin',
+            'password' => 'admin123',
         ]);
 
         // Assert success
@@ -68,14 +64,8 @@ class AuthenticationTest extends TestCase
      */
     public function test_employee_cannot_login_with_invalid_credentials(): void
     {
-        $admin = EAdmin::factory()->create([
-            'login' => 'testadmin',
-            'password' => Hash::make('password123'),
-            'active' => true,
-        ]);
-
         $response = $this->postJson('/api/v1/employee/auth/login', [
-            'login' => 'testadmin',
+            'login' => 'test_admin',
             'password' => 'wrongpassword',
         ]);
 
@@ -90,15 +80,9 @@ class AuthenticationTest extends TestCase
      */
     public function test_inactive_employee_cannot_login(): void
     {
-        $admin = EAdmin::factory()->create([
-            'login' => 'testadmin',
-            'password' => Hash::make('password123'),
-            'active' => false,
-        ]);
-
         $response = $this->postJson('/api/v1/employee/auth/login', [
-            'login' => 'testadmin',
-            'password' => 'password123',
+            'login' => 'inactive_admin',
+            'password' => 'admin123',
         ]);
 
         $response->assertStatus(401);
@@ -109,15 +93,9 @@ class AuthenticationTest extends TestCase
      */
     public function test_student_can_login_with_valid_credentials(): void
     {
-        $student = EStudent::factory()->create([
-            'student_id_number' => 'ST001',
-            'password' => Hash::make('password123'),
-            'active' => true,
-        ]);
-
         $response = $this->postJson('/api/v1/student/auth/login', [
-            'student_id' => 'ST001',
-            'password' => 'password123',
+            'student_id' => 'TEST001',
+            'password' => 'student123',
         ]);
 
         $response->assertStatus(200)
@@ -149,14 +127,8 @@ class AuthenticationTest extends TestCase
      */
     public function test_student_cannot_login_with_invalid_credentials(): void
     {
-        $student = EStudent::factory()->create([
-            'student_id_number' => 'ST001',
-            'password' => Hash::make('password123'),
-            'active' => true,
-        ]);
-
         $response = $this->postJson('/api/v1/student/auth/login', [
-            'student_id' => 'ST001',
+            'student_id' => 'TEST001',
             'password' => 'wrongpassword',
         ]);
 
@@ -171,10 +143,7 @@ class AuthenticationTest extends TestCase
      */
     public function test_authenticated_employee_can_get_profile(): void
     {
-        $admin = EAdmin::factory()->create([
-            'active' => true,
-        ]);
-
+        $admin = EAdmin::where('login', 'test_admin')->first();
         $token = auth('employee-api')->login($admin);
 
         $response = $this->withHeaders([
@@ -201,10 +170,7 @@ class AuthenticationTest extends TestCase
      */
     public function test_authenticated_student_can_get_profile(): void
     {
-        $student = EStudent::factory()->create([
-            'active' => true,
-        ]);
-
+        $student = EStudent::where('student_id_number', 'TEST001')->first();
         $token = auth('student-api')->login($student);
 
         $response = $this->withHeaders([
@@ -240,7 +206,7 @@ class AuthenticationTest extends TestCase
      */
     public function test_authenticated_employee_can_logout(): void
     {
-        $admin = EAdmin::factory()->create(['active' => true]);
+        $admin = EAdmin::where('login', 'test_admin')->first();
         $token = auth('employee-api')->login($admin);
 
         $response = $this->withHeaders([
@@ -258,12 +224,19 @@ class AuthenticationTest extends TestCase
      */
     public function test_authenticated_employee_can_refresh_token(): void
     {
-        $admin = EAdmin::factory()->create(['active' => true]);
-        $token = auth('employee-api')->login($admin);
+        // First login to get refresh_token
+        $loginResponse = $this->postJson('/api/v1/employee/auth/login', [
+            'login' => 'test_admin',
+            'password' => 'admin123',
+        ]);
 
-        $response = $this->withHeaders([
-            'Authorization' => "Bearer $token",
-        ])->postJson('/api/v1/employee/auth/refresh');
+        $loginResponse->assertStatus(200);
+        $refreshToken = $loginResponse->json('data.refresh_token');
+
+        // Now use refresh_token to get new access_token
+        $response = $this->postJson('/api/v1/employee/auth/refresh', [
+            'refresh_token' => $refreshToken,
+        ]);
 
         $response->assertStatus(200)
             ->assertJsonStructure([
@@ -281,13 +254,23 @@ class AuthenticationTest extends TestCase
      */
     public function test_employee_login_validation_errors(): void
     {
+        // Test missing login field
         $response = $this->postJson('/api/v1/employee/auth/login', [
             'login' => '', // Empty login
-            'password' => '123', // Too short
+            'password' => 'validpassword',
         ]);
 
         $response->assertStatus(422)
-            ->assertJsonValidationErrors(['login', 'password']);
+            ->assertJsonValidationErrors(['login']);
+
+        // Test missing password field
+        $response = $this->postJson('/api/v1/employee/auth/login', [
+            'login' => 'test_user',
+            'password' => '', // Empty password
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['password']);
     }
 
     /**
@@ -295,12 +278,22 @@ class AuthenticationTest extends TestCase
      */
     public function test_student_login_validation_errors(): void
     {
+        // Test missing student_id field
         $response = $this->postJson('/api/v1/student/auth/login', [
             'student_id' => '', // Empty student_id
-            'password' => '123', // Too short
+            'password' => 'validpassword',
         ]);
 
         $response->assertStatus(422)
-            ->assertJsonValidationErrors(['student_id', 'password']);
+            ->assertJsonValidationErrors(['student_id']);
+
+        // Test missing password field
+        $response = $this->postJson('/api/v1/student/auth/login', [
+            'student_id' => 'TEST999',
+            'password' => '', // Empty password
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['password']);
     }
 }

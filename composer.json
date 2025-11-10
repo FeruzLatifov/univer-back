@@ -17,6 +17,7 @@
         "tymon/jwt-auth": "^2.0"
     },
     "require-dev": {
+        "fakerphp/faker": "^1.24",
         "friendsofphp/php-cs-fixer": "*",
         "larastan/larastan": "*",
         "laravel/sail": "^1.26",

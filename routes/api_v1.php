@@ -23,6 +23,7 @@ use App\Http\Controllers\Api\V1\Teacher\TestController as TeacherTestController;
 use App\Http\Controllers\Api\V1\LanguageController;
 use App\Http\Controllers\Api\Admin\TranslationController;
 use App\Http\Controllers\Api\V1\Employee\DocumentController as EmployeeDocumentController;
+use App\Http\Controllers\Api\V1\SystemController;
 
 /*
 |--------------------------------------------------------------------------
@@ -37,6 +38,14 @@ use App\Http\Controllers\Api\V1\Employee\DocumentController as EmployeeDocumentC
 // ==========================================
 // PUBLIC ENDPOINTS
 // ==========================================
+
+// System Configuration (Public - needed for login page)
+Route::prefix('system')->group(function () {
+    Route::get('/login-config', [SystemController::class, 'getLoginConfig']);
+    Route::get('/translations/{language}', [SystemController::class, 'getTranslations']);
+    Route::get('/languages', [SystemController::class, 'getLanguages']);
+});
+
 Route::get('/health', function () {
     return response()->json([
         'status' => 'ok',
@@ -318,6 +327,16 @@ Route::prefix('admin')->middleware(['auth:employee-api', 'throttle:students'])->
         Route::get('/categories', [TranslationController::class, 'categories']);
         Route::get('/stats', [TranslationController::class, 'stats']);
         Route::post('/clear-cache', [TranslationController::class, 'clearCache']);
+        
+        // Import/Export/Transliterate
+        Route::post('/import', [TranslationController::class, 'import']);
+        Route::get('/export', [TranslationController::class, 'export']);
+        Route::post('/transliterate', [TranslationController::class, 'transliterate']);
+        
+        // Custom translations (university-specific)
+        Route::post('/{id}/custom', [TranslationController::class, 'updateCustom']);
+        Route::delete('/{id}/custom/{language}', [TranslationController::class, 'deleteCustom']);
+        
         Route::get('/{id}', [TranslationController::class, 'show']);
         Route::put('/{id}', [TranslationController::class, 'update']);
         Route::delete('/{id}', [TranslationController::class, 'destroy']);

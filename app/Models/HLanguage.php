@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
+use App\Services\LanguageMapper;
 use Illuminate\Database\Eloquent\Model;
 
 /**
  * HLanguage Model
  *
- * @property string $code
+ * @property int $code Yii2 INTEGER code (11, 12, ...)
  * @property string $name
  * @property string|null $native_name
  * @property int $position
@@ -17,13 +18,15 @@ use Illuminate\Database\Eloquent\Model;
  * @property array|null $_options
  * @property \Carbon\Carbon $created_at
  * @property \Carbon\Carbon $updated_at
+ * 
+ * @property-read string $iso_code ISO string code (uz, ru, ...)
  */
 class HLanguage extends Model
 {
     protected $table = 'h_language';
     protected $primaryKey = 'code';
     public $incrementing = false;
-    protected $keyType = 'string';
+    protected $keyType = 'integer';
 
     protected $fillable = [
         'code',
@@ -37,11 +40,17 @@ class HLanguage extends Model
     ];
 
     protected $casts = [
+        'code' => 'integer',
         'active' => 'boolean',
         'position' => 'integer',
         '_translations' => 'array',
         '_options' => 'array',
     ];
+
+    /**
+     * Appends: virtual attributes
+     */
+    protected $appends = ['iso_code'];
 
     /**
      * Scope: Active languages
@@ -57,6 +66,17 @@ class HLanguage extends Model
     public function scopeOrdered($query)
     {
         return $query->orderBy('position');
+    }
+
+    /**
+     * Virtual Attribute: ISO code
+     * Converts Yii2 INTEGER code to ISO string code
+     * 
+     * @return string|null
+     */
+    public function getIsoCodeAttribute(): ?string
+    {
+        return LanguageMapper::toIso($this->code);
     }
 
     /**
@@ -91,6 +111,7 @@ class HLanguage extends Model
 
     /**
      * Get all active languages ordered by position
+     * Returns ISO codes (uz, ru, ...) instead of Yii2 INTEGER codes
      */
     public static function getActiveLanguages(): array
     {
@@ -98,11 +119,14 @@ class HLanguage extends Model
             ->ordered()
             ->get()
             ->map(fn($lang) => [
-                'code' => $lang->code,
+                'code' => $lang->iso_code,  // ISO code
+                'yii_code' => $lang->code,  // Original INTEGER code
                 'name' => $lang->name,
-                'native_name' => $lang->native_name,
+                'native_name' => $lang->native_name ?: LanguageMapper::getNativeName($lang->iso_code),
                 'position' => $lang->position,
             ])
+            ->filter(fn($lang) => $lang['code'] !== null)  // Remove unmapped languages
+            ->values()
             ->toArray();
     }
 }

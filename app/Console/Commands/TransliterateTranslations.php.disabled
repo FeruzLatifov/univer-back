@@ -1,0 +1,251 @@
+<?php
+
+namespace App\Console\Commands;
+
+use App\Models\System\SystemMessage;
+use App\Models\System\SystemMessageTranslation;
+use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
+
+/**
+ * Transliterate uz-UZ to oz-UZ automatically
+ * 
+ * Usage:
+ *   php artisan translation:transliterate
+ *   php artisan translation:transliterate --force
+ *   php artisan translation:transliterate --dry-run
+ * 
+ * Converts:
+ *   uz-UZ (Latin): "Boshqaruv paneli"
+ *   oz-UZ (Cyrillic): "Бошқарув панели"
+ */
+class TransliterateTranslations extends Command
+{
+    /**
+     * The name and signature of the console command.
+     */
+    protected $signature = 'translation:transliterate 
+                            {--from=uz-UZ : Source language}
+                            {--to=oz-UZ : Target language}
+                            {--force : Overwrite existing translations}
+                            {--dry-run : Show what would be transliterated without actually doing it}';
+
+    /**
+     * The console command description.
+     */
+    protected $description = 'Transliterate translations from Latin (uz-UZ) to Cyrillic (oz-UZ)';
+
+    /**
+     * Transliteration map (Latin → Cyrillic)
+     */
+    protected $map = [
+        // Uppercase
+        'A' => 'А', 'B' => 'Б', 'D' => 'Д', 'E' => 'Е', 'F' => 'Ф',
+        'G' => 'Г', 'H' => 'Ҳ', 'I' => 'И', 'J' => 'Ж', 'K' => 'К',
+        'L' => 'Л', 'M' => 'М', 'N' => 'Н', 'O' => 'О', 'P' => 'П',
+        'Q' => 'Қ', 'R' => 'Р', 'S' => 'С', 'T' => 'Т', 'U' => 'У',
+        'V' => 'В', 'X' => 'Х', 'Y' => 'Й', 'Z' => 'З',
+        
+        // Special combinations (must be before single letters)
+        'Sh' => 'Ш', 'SH' => 'Ш', 'sh' => 'ш',
+        'Ch' => 'Ч', 'CH' => 'Ч', 'ch' => 'ч',
+        
+        // Lowercase
+        'a' => 'а', 'b' => 'б', 'd' => 'д', 'e' => 'е', 'f' => 'ф',
+        'g' => 'г', 'h' => 'ҳ', 'i' => 'и', 'j' => 'ж', 'k' => 'к',
+        'l' => 'л', 'm' => 'м', 'n' => 'н', 'o' => 'о', 'p' => 'п',
+        'q' => 'қ', 'r' => 'р', 's' => 'с', 't' => 'т', 'u' => 'у',
+        'v' => 'в', 'x' => 'х', 'y' => 'й', 'z' => 'з',
+        
+        // English letters that stay same
+        'C' => 'Ц', 'c' => 'ц',
+        'W' => 'В', 'w' => 'в',
+    ];
+
+    /**
+     * Execute the console command.
+     */
+    public function handle()
+    {
+        $from = $this->option('from');
+        $to = $this->option('to');
+        $force = $this->option('force');
+        $dryRun = $this->option('dry-run');
+
+        $this->info("🔄 Transliterating: {$from} → {$to}");
+        $this->newLine();
+
+        // Get all translations in source language
+        $query = SystemMessageTranslation::where('language', $from)
+            ->whereNotNull('translation')
+            ->where('translation', '!=', '');
+
+        if (!$force) {
+            // Only transliterate if target translation is empty
+            $query->whereDoesntHave('message', function ($q) use ($to) {
+                $q->whereHas('translations', function ($q2) use ($to) {
+                    $q2->where('language', $to)
+                       ->whereNotNull('translation')
+                       ->where('translation', '!=', '');
+                });
+            });
+        }
+
+        $translations = $query->get();
+
+        if ($translations->isEmpty()) {
+            $this->info('✅ No translations to transliterate');
+            return 0;
+        }
+
+        $this->info("📊 Found {$translations->count()} translations to process");
+        $this->newLine();
+
+        // Progress bar
+        $bar = $this->output->createProgressBar($translations->count());
+        $bar->setFormat(' %current%/%max% [%bar%] %percent:3s%% %message%');
+        $bar->setMessage('Starting...');
+        $bar->start();
+
+        $stats = [
+            'processed' => 0,
+            'created' => 0,
+            'updated' => 0,
+            'skipped' => 0,
+        ];
+
+        DB::beginTransaction();
+
+        try {
+            foreach ($translations as $translation) {
+                $stats['processed']++;
+
+                // Transliterate
+                $transliterated = $this->transliterate($translation->translation);
+
+                if (empty($transliterated)) {
+                    $stats['skipped']++;
+                    $bar->advance();
+                    continue;
+                }
+
+                // Find or create target translation
+                $target = SystemMessageTranslation::firstOrNew([
+                    'id' => $translation->id,
+                    'language' => $to,
+                ]);
+
+                $isNew = !$target->exists;
+
+                if (!$dryRun) {
+                    $target->translation = $transliterated;
+                    $target->save();
+
+                    if ($isNew) {
+                        $stats['created']++;
+                    } else {
+                        $stats['updated']++;
+                    }
+                } else {
+                    if ($isNew) {
+                        $stats['created']++;
+                    } else {
+                        $stats['updated']++;
+                    }
+                }
+
+                $bar->setMessage("Transliterated: {$translation->translation}");
+                $bar->advance();
+            }
+
+            if (!$dryRun) {
+                DB::commit();
+                
+                // Clear cache
+                Cache::tags(['translations'])->flush();
+                
+                $bar->setMessage('✅ Committed to database');
+            } else {
+                DB::rollBack();
+                $bar->setMessage('🔍 Dry run completed (no changes)');
+            }
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            $bar->finish();
+            $this->newLine(2);
+            $this->error("❌ Transliteration failed: " . $e->getMessage());
+            return 1;
+        }
+
+        $bar->finish();
+
+        // Summary
+        $this->newLine(2);
+        $this->info('📊 Transliteration Summary:');
+        $this->table(
+            ['Metric', 'Count'],
+            [
+                ['Total processed', number_format($stats['processed'])],
+                ['Created', number_format($stats['created'])],
+                ['Updated', number_format($stats['updated'])],
+                ['Skipped', number_format($stats['skipped'])],
+            ]
+        );
+
+        if ($dryRun) {
+            $this->newLine();
+            $this->warn('🔍 This was a DRY RUN - no changes were made');
+            $this->info('Run without --dry-run to actually transliterate');
+        } else {
+            $this->newLine();
+            $this->info('✅ Transliteration completed successfully!');
+            $this->info('🗑️  Translation cache cleared');
+        }
+
+        return 0;
+    }
+
+    /**
+     * Transliterate Latin to Cyrillic
+     */
+    protected function transliterate(string $text): string
+    {
+        // Replace special combinations first (sh, ch, oʻ, gʻ)
+        $specialCombinations = [
+            'Sh' => 'Ш',
+            'SH' => 'Ш',
+            'sh' => 'ш',
+            'Ch' => 'Ч',
+            'CH' => 'Ч',
+            'ch' => 'ч',
+        ];
+
+        $result = $text;
+        
+        foreach ($specialCombinations as $search => $replacement) {
+            $result = str_replace($search, $replacement, $result);
+        }
+
+        // Handle special apostrophe characters (oʻ, gʻ)
+        $result = preg_replace('/[Oo]ʻ/u', 'Ў', $result);
+        $result = preg_replace('/[Oo]ʼ/u', 'Ў', $result);
+        $result = preg_replace('/[Oo]\'/u', 'Ў', $result);
+        $result = preg_replace('/[oо]ʻ/u', 'ў', $result);
+        $result = preg_replace('/[oо]ʼ/u', 'ў', $result);
+        $result = preg_replace('/[oо]\'/u', 'ў', $result);
+        
+        $result = preg_replace('/[Gg]ʻ/u', 'Ғ', $result);
+        $result = preg_replace('/[Gg]ʼ/u', 'Ғ', $result);
+        $result = preg_replace('/[Gg]\'/u', 'Ғ', $result);
+        $result = preg_replace('/[gг]ʻ/u', 'ғ', $result);
+        $result = preg_replace('/[gг]ʼ/u', 'ғ', $result);
+        $result = preg_replace('/[gг]\'/u', 'ғ', $result);
+
+        // Then replace single letters
+        $result = strtr($result, $this->map);
+
+        return $result;
+    }
+}

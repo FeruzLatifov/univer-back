@@ -32,8 +32,10 @@ Route::middleware('throttle:public')->group(function () {
         Route::get('/languages', [\App\Http\Controllers\Api\V1\LanguageController::class, 'index']);
         Route::get('/languages/current', [\App\Http\Controllers\Api\V1\LanguageController::class, 'current']);
         Route::get('/languages/translations', [\App\Http\Controllers\Api\V1\LanguageController::class, 'getTranslations']);
-        Route::get('/languages/{code}', [\App\Http\Controllers\Api\V1\LanguageController::class, 'show']);
         Route::post('/languages/set', [\App\Http\Controllers\Api\V1\LanguageController::class, 'setLanguage']);
+        // Constrain {code} to only match valid ISO language codes (uz, oz, ru, en, etc)
+        Route::get('/languages/{code}', [\App\Http\Controllers\Api\V1\LanguageController::class, 'show'])
+            ->where('code', '^(uz|oz|ru|en|tj|kz|tm|ko|de|fr)$');
     });
 });
 
@@ -61,10 +63,10 @@ Route::middleware('throttle:public')->group(function () {
 // Student Auth (5 req/min)
 Route::middleware('throttle:auth')->prefix('student/auth')->group(function () {
     Route::post('/login', [\App\Http\Controllers\Api\V1\Student\AuthController::class, 'login']);
+    Route::post('/refresh', [\App\Http\Controllers\Api\V1\Student\AuthController::class, 'refresh']);
 
     Route::middleware('auth:student-api')->group(function () {
         Route::post('/logout', [\App\Http\Controllers\Api\V1\Student\AuthController::class, 'logout']);
-        Route::post('/refresh', [\App\Http\Controllers\Api\V1\Student\AuthController::class, 'refresh']);
         Route::get('/me', [\App\Http\Controllers\Api\V1\Student\AuthController::class, 'me']);
     });
 });
@@ -112,12 +114,12 @@ Route::middleware(['auth:student-api', 'throttle:api'])->prefix('student')->grou
 */
 Route::middleware('throttle:auth')->prefix('v1/employee/auth')->group(function () {
     Route::post('/login', [\App\Http\Controllers\Api\V1\Employee\AuthController::class, 'login']);
+    Route::post('/refresh', [\App\Http\Controllers\Api\V1\Employee\AuthController::class, 'refresh']);
     Route::post('/forgot-password', [\App\Http\Controllers\Api\V1\Employee\AuthController::class, 'forgotPassword']);
     Route::post('/reset-password', [\App\Http\Controllers\Api\V1\Employee\AuthController::class, 'resetPassword']);
 
     Route::middleware('auth:employee-api')->group(function () {
         Route::post('/logout', [\App\Http\Controllers\Api\V1\Employee\AuthController::class, 'logout']);
-        Route::post('/refresh', [\App\Http\Controllers\Api\V1\Employee\AuthController::class, 'refresh']);
         Route::get('/me', [\App\Http\Controllers\Api\V1\Employee\AuthController::class, 'me']);
         Route::post('/role/switch', [\App\Http\Controllers\Api\V1\Employee\AuthController::class, 'switchRole']);
 
@@ -125,6 +127,31 @@ Route::middleware('throttle:auth')->prefix('v1/employee/auth')->group(function (
         Route::get('/permissions', [\App\Http\Controllers\Api\V1\Employee\AuthController::class, 'getPermissions']);
         Route::post('/permissions/check', [\App\Http\Controllers\Api\V1\Employee\AuthController::class, 'checkPermissions']);
     });
+});
+
+/*
+|--------------------------------------------------------------------------
+| OAuth2 Server Endpoints
+|--------------------------------------------------------------------------
+| OAuth2 Authorization Code Flow
+| Compatible with Yii2 OAuth2 implementation
+| Use for third-party application integration
+*/
+Route::prefix('v1/oauth')->group(function () {
+    // Authorization endpoint (Step 1)
+    Route::get('/authorize', [\App\Http\Controllers\Api\V1\OAuthController::class, 'authorize']);
+
+    // Grant authorization (Step 2) - Requires authentication
+    Route::middleware('auth:employee-api')->post('/authorize', [\App\Http\Controllers\Api\V1\OAuthController::class, 'grant']);
+
+    // Token endpoint (Step 3) - Exchange code or refresh
+    Route::post('/token', [\App\Http\Controllers\Api\V1\OAuthController::class, 'token']);
+
+    // Revoke token
+    Route::post('/revoke', [\App\Http\Controllers\Api\V1\OAuthController::class, 'revoke']);
+
+    // User info endpoint (for resource servers)
+    Route::get('/userinfo', [\App\Http\Controllers\Api\V1\OAuthController::class, 'userinfo']);
 });
 
 /*

@@ -24,10 +24,10 @@ class RefreshTokenService
         AuthRefreshToken::create([
             'user_id' => $userId,
             'user_type' => $userType,
-            'token_hash' => $this->hashToken($plainToken),
-            'ip_address' => $ip,
-            'user_agent' => $userAgent,
+            'token' => $this->hashToken($plainToken),
+            'guard_name' => $userType === 'employee' ? 'employee-api' : 'student-api',
             'expires_at' => Carbon::now()->addMinutes($this->ttlMinutes),
+            'revoked' => false,
         ]);
 
         return $plainToken;
@@ -40,8 +40,9 @@ class RefreshTokenService
         }
 
         return AuthRefreshToken::where('user_type', $userType)
-            ->where('token_hash', $this->hashToken($token))
+            ->where('token', $this->hashToken($token))
             ->where('expires_at', '>', Carbon::now())
+            ->where('revoked', false)
             ->first();
     }
 
@@ -62,7 +63,7 @@ class RefreshTokenService
         }
 
         AuthRefreshToken::where('user_type', $userType)
-            ->where('token_hash', $this->hashToken($token))
+            ->where('token', $this->hashToken($token))
             ->delete();
     }
 
@@ -85,10 +86,10 @@ class RefreshTokenService
         AuthRefreshToken::create([
             'user_id' => $userId,
             'user_type' => $userType,
-            'token_hash' => $this->hashToken($plainToken),
-            'ip_address' => $ip,
-            'user_agent' => $userAgent,
+            'token' => $this->hashToken($plainToken),
+            'guard_name' => $userType === 'employee' ? 'employee-api' : 'student-api',
             'expires_at' => Carbon::now()->addMinutes($this->ttlMinutes),
+            'revoked' => false,
         ]);
 
         return $plainToken;

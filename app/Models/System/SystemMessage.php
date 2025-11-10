@@ -4,6 +4,7 @@ namespace App\Models\System;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Tizim xabarlari modeli (Asl matnlar)
@@ -25,7 +26,8 @@ class SystemMessage extends Model
     ];
 
     /**
-     * Tarjimalar bilan bog'lanish
+     * Translations relationship
+     * Contains both base and custom translations
      */
     public function translations(): HasMany
     {
@@ -33,7 +35,8 @@ class SystemMessage extends Model
     }
 
     /**
-     * Ma'lum bir til uchun tarjima olish
+     * Get translation for specific language
+     * Priority: custom_translation > translation > original message
      */
     public function getTranslation(string $language): ?string
     {
@@ -41,18 +44,40 @@ class SystemMessage extends Model
             ->where('language', $language)
             ->first();
 
-        return $translation?->translation ?? $this->message;
+        if (!$translation) {
+            return $this->message;
+        }
+
+        // Priority: custom_translation > translation
+        return $translation->custom_translation ?? $translation->translation ?? $this->message;
     }
 
     /**
-     * Barcha tillar uchun tarjimalarni olish
+     * Get all translations with custom overrides
+     * Returns: [
+     *   'uz-UZ' => [
+     *     'base' => '...', 
+     *     'custom' => '...', 
+     *     'is_custom' => true,
+     *     'final' => '...' (custom or base)
+     *   ]
+     * ]
      */
     public function getAllTranslations(): array
     {
         $result = [];
+
         foreach ($this->translations as $translation) {
-            $result[$translation->language] = $translation->translation;
+            $hasCustom = !empty($translation->custom_translation);
+            
+            $result[$translation->language] = [
+                'base' => $translation->translation,
+                'custom' => $translation->custom_translation,
+                'is_custom' => $hasCustom,
+                'final' => $hasCustom ? $translation->custom_translation : $translation->translation,
+            ];
         }
+
         return $result;
     }
 
@@ -87,5 +112,15 @@ class SystemMessage extends Model
                 'message' => $message,
             ]
         );
+    }
+
+    /**
+     * Clear all translation caches
+     */
+    public static function clearCache(): void
+    {
+        Cache::tags(['translations'])->flush();
+
+        \Log::info('Translation cache cleared');
     }
 }

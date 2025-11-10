@@ -21,11 +21,14 @@ class EAdminRole extends Model
         'status',
         'position',
         'active',
+        'guard_name',      // Hybrid: Laravel guard system
+        'spatie_enabled',  // Hybrid: gradual migration flag
     ];
 
     protected $casts = [
         'active' => 'boolean',
         '_translations' => 'array',
+        'spatie_enabled' => 'boolean', // Hybrid: cast to boolean
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];

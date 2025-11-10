@@ -18,16 +18,18 @@ use Illuminate\Support\Carbon;
  */
 class AuthRefreshToken extends Model
 {
+    protected $table = 'e_auth_refresh_tokens';
+
     public const TYPE_STUDENT = 'student';
     public const TYPE_EMPLOYEE = 'employee';
 
     protected $fillable = [
         'user_id',
         'user_type',
-        'token_hash',
-        'ip_address',
-        'user_agent',
+        'token',
+        'guard_name',
         'expires_at',
+        'revoked',
     ];
 
     protected $casts = [

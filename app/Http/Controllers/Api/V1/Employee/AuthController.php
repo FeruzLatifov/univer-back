@@ -209,32 +209,13 @@ class AuthController extends Controller
             ], 401);
         }
 
+        // Yii2 uses bcrypt ($2y$) - Hash::check handles bcrypt validation
         $passwordOk = Hash::check($request->password, $admin->password);
-        $this->debug('Primary bcrypt check', ['ok' => $passwordOk]);
-
-        if (!$passwordOk) {
-            $allowMd5 = filter_var(env('AUTH_ALLOW_MD5', true), FILTER_VALIDATE_BOOL);
-            $looksLikeMd5 = is_string($admin->password) && strlen($admin->password) === 32 && ctype_xdigit($admin->password);
-            if ($allowMd5 && $looksLikeMd5 && hash_equals($admin->password, md5($request->password))) {
-                $passwordOk = true;
-                // Optional upgrade to bcrypt (disabled by default to keep Yii2 compatibility)
-                $upgrade = filter_var(env('AUTH_UPGRADE_MD5_TO_BCRYPT', false), FILTER_VALIDATE_BOOL);
-                if ($upgrade) {
-                    try {
-                        $admin->password = Hash::make($request->password);
-                        $admin->save();
-                        $this->debug('MD5 upgraded to bcrypt', ['admin_id' => $admin->id]);
-                    } catch (\Throwable $e) {
-                        // ignore upgrade failure; proceed with login
-                    }
-                }
-            } else {
-                $this->debug('MD5 fallback failed or not applicable', [
-                    'allow_md5' => $allowMd5,
-                    'looks_like_md5' => $looksLikeMd5,
-                ]);
-            }
-        }
+        $this->debug('Bcrypt password check', [
+            'ok' => $passwordOk,
+            'admin_id' => $admin->id,
+            'password_length' => strlen($admin->password ?? ''),
+        ]);
 
         if (!$passwordOk) {
             $this->debug('Password verification failed', ['admin_id' => $admin->id]);
@@ -509,7 +490,7 @@ class AuthController extends Controller
      */
     public function refresh(Request $request)
     {
-        $refreshToken = $request->bearerToken() ?? $request->input('refresh_token');
+        $refreshToken = $request->input('refresh_token');
 
         if (!$refreshToken) {
             return response()->json([

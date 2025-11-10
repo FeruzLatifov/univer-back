@@ -38,12 +38,16 @@ class EAdminResource extends Model
         'active',
         'skip',
         'login',
+        'permission_name',  // Hybrid: Laravel name-based permission
+        'guard_name',       // Hybrid: Laravel guard system
+        'spatie_enabled',   // Hybrid: gradual migration flag
     ];
 
     protected $casts = [
         'active' => 'boolean',
         'skip' => 'boolean',
         'login' => 'boolean',
+        'spatie_enabled' => 'boolean', // Hybrid: cast to boolean
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];

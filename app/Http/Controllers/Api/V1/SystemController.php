@@ -14,18 +14,44 @@ class SystemController extends Controller
      */
     public function getLoginConfig(Request $request)
     {
-        $language = $request->get('l', 'uz-UZ');
+        // Get locale from Accept-Language header or query parameter
+        $locale = $request->header('Accept-Language', $request->get('l', 'uz'));
+
+        // Convert full locale to short (uz-UZ -> uz)
+        $locale = substr($locale, 0, 2);
+
+        // Set Laravel locale for trans() helper
+        app()->setLocale($locale);
 
         // Get university from database (e_university table like Yii2)
         // Equivalent to EUniversity::findCurrentUniversity() in Yii2
         $university = EUniversity::getCurrent();
 
-        // Compute logo with safe fallback if DB doesn't have a logo
-        $logoPath = $university?->getLogo();
-        if (empty($logoPath)) {
-            $logoPath = env('UNIVERSITY_LOGO', '/images/hemis-logo.png');
+        // Priority: Database logo > ENV logo > null (frontend will use default)
+        $logoPath = null;
+        
+        // 1. Check database first (bazadagi logo birinchi o'rinni egallaydi)
+        if ($university) {
+            $dbLogo = $university->getLogo();
+            if ($dbLogo && $dbLogo !== '/images/logo.png') {
+                $logoPath = $dbLogo;
+            }
         }
-        $logo = $this->absoluteUrl($request, $logoPath);
+        
+        // 2. Fallback to ENV if no DB logo (bazada yo'q bo'lsa .env dan olinadi)
+        if (!$logoPath) {
+            $envLogo = env('UNIVERSITY_LOGO');
+            if ($envLogo && $envLogo !== '/images/logo.png') {
+                $logoPath = $envLogo;
+            }
+        }
+
+        // 3. Convert to absolute URL if exists (agar mavjud bo'lsa to'liq URL ga o'giradi)
+        $logo = $logoPath ? $this->absoluteUrl($request, $logoPath) : null;
+        
+        // 4. Favicon handling (favicon alohida)
+        $faviconPath = env('UNIVERSITY_FAVICON', '/favicon.ico');
+        $favicon = $this->absoluteUrl($request, $faviconPath);
 
         return response()->json([
             'success' => true,
@@ -34,19 +60,19 @@ class SystemController extends Controller
                 'university_name' => $university?->name ?? env('UNIVERSITY_NAME', 'Universitet'),
                 'university_short_name' => $university?->getShortName() ?? env('UNIVERSITY_SHORT_NAME', 'UNIVER'),
                 'university_logo' => $logo,
-                'favicon' => env('UNIVERSITY_FAVICON', '/favicon.ico'),
+                'favicon' => $favicon,
                 'system_name' => env('SYSTEM_NAME', 'HEMIS Universitet axborot tizimi'),
                 'app_version' => env('APP_VERSION', '1.0.0'),
                 'login_types' => [
                     'employee' => [
                         'enabled' => true,
-                        'label' => 'Xodim',
+                        'label' => trans('roles.employee'),
                         'icon' => 'employee',
                         'endpoint' => '/api/v1/employee/auth/login',
                     ],
                     'student' => [
                         'enabled' => true,
-                        'label' => 'Talaba',
+                        'label' => trans('roles.student'),
                         'icon' => 'student',
                         'endpoint' => '/api/v1/student/auth/login',
                     ],
@@ -82,7 +108,10 @@ class SystemController extends Controller
         if (filter_var($path, FILTER_VALIDATE_URL)) {
             return $path;
         }
-        $prefix = rtrim($request->getSchemeAndHttpHost(), '/');
+        
+        // Use APP_URL from .env (best practice for multi-environment support)
+        $baseUrl = env('APP_URL', $request->getSchemeAndHttpHost());
+        $prefix = rtrim($baseUrl, '/');
         $normalized = '/' . ltrim($path, '/');
         return $prefix . $normalized;
     }

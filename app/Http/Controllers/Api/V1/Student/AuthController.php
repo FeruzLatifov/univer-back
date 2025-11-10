@@ -376,7 +376,7 @@ class AuthController extends Controller
      */
     public function refresh(Request $request): JsonResponse
     {
-        $refreshToken = $request->bearerToken() ?? $request->input('refresh_token');
+        $refreshToken = $request->input('refresh_token');
 
         if (!$refreshToken) {
             return $this->errorResponse(__('auth.token_refresh_failed'), 422);
