@@ -47,6 +47,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => \App\Http\Middleware\CheckPermission::class,
             'load.translations' => \App\Http\Middleware\LoadTranslations::class,
             'throttle.api' => \App\Http\Middleware\ApiRateLimiter::class,
+            'verify.app' => \App\Http\Middleware\VerifyAppSignature::class,
+            'verify.device' => \App\Http\Middleware\VerifyDeviceFingerprint::class,
         ]);
 
         // Configure authentication redirect to return null for API routes

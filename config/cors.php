@@ -15,21 +15,29 @@ return [
 
     'paths' => ['api/*', 'sanctum/csrf-cookie'],
 
-    'allowed_methods' => ['*'],
+    'allowed_methods' => ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 
-    'allowed_origins' => array_filter([
-        'http://localhost:5173',
-        'http://localhost:3000',
-        'http://localhost:8080',
-        env('FRONTEND_URL'),
-        env('PRODUCTION_URL'),
-    ]),
+    // Production'da faqat belgilangan domenlar
+    'allowed_origins' => env('APP_ENV') === 'production'
+        ? array_filter([
+            env('FRONTEND_URL'),
+            env('PRODUCTION_URL'),
+        ])
+        : array_filter([
+            'http://localhost:5173',
+            'http://localhost:3000',
+            'http://localhost:8080',
+            env('FRONTEND_URL'),
+            env('PRODUCTION_URL'),
+        ]),
 
-    'allowed_origins_patterns' => [
-        // Allow localhost with any port (development)
-        '/^http:\/\/localhost:\d+$/',
-        '/^http:\/\/127\.0\.0\.1:\d+$/',
-    ],
+    // Production'da pattern'larni o'chirish
+    'allowed_origins_patterns' => env('APP_ENV') === 'production'
+        ? []
+        : [
+            '/^http:\/\/localhost:\d+$/',
+            '/^http:\/\/127\.0\.0\.1:\d+$/',
+        ],
 
     'allowed_headers' => [
         'Accept',
@@ -39,6 +47,10 @@ return [
         'X-CSRF-Token',
         'X-Locale',
         'X-Language',
+        'X-App-Key',           // App identifikatori
+        'X-App-Signature',     // So'rov imzosi
+        'X-App-Timestamp',     // Vaqt belgisi
+        'X-Device-Id',         // Qurilma identifikatori
     ],
 
     'exposed_headers' => [

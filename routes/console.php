@@ -2,8 +2,10 @@
 
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schedule;
 use App\Models\EAdminResource;
 use App\Models\EAdmin;
+use App\Models\AuthRefreshToken;
 use App\Services\Menu\MenuService;
 
 Artisan::command('inspire', function () {
@@ -79,3 +81,18 @@ Artisan::command('menu:preview {--user=admin} {--locale=uz} {--json}', function 
     $this->info('Menu generated:');
     $this->line('items='.count($menu['data']['menu']).' cached='.(int)$menu['meta']['cached'].' locale='.$menu['data']['locale']);
 })->purpose('Preview filtered menu for a user and locale');
+
+// ========================================
+// Scheduled Tasks
+// ========================================
+
+/**
+ * Clean up expired refresh tokens
+ * Runs every hour to keep the database clean
+ */
+Schedule::call(function () {
+    $deleted = AuthRefreshToken::where('expires_at', '<=', now())->delete();
+    if ($deleted > 0) {
+        logger()->info('[SCHEDULER] Cleaned up expired refresh tokens', ['count' => $deleted]);
+    }
+})->hourly()->name('cleanup-expired-refresh-tokens')->withoutOverlapping();

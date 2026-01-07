@@ -47,10 +47,15 @@ class EUniversity extends Model
             'en-US' => 'en',
         ];
 
-        // Get locale from X-Locale header, request param, or app locale
+        // Get locale from X-Locale header, Accept-Language header, request param, or app locale
         $locale = request()->header('X-Locale')
+            ?? request()->header('Accept-Language')
             ?? request()->get('l')
             ?? app()->getLocale();
+        
+        // Extract primary language code (uz-UZ -> uz)
+        $locale = explode('-', $locale)[0];
+        
         $lang = $langMap[$locale] ?? 'uz';
 
         // Get translation from _translations jsonb field

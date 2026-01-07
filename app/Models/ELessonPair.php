@@ -18,7 +18,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class ELessonPair extends Model
 {
-    protected $table = 'e_lesson_pair';
+    protected $table = 'h_lesson_pair';
 
     public $timestamps = false;
 

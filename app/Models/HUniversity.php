@@ -37,13 +37,23 @@ class HUniversity extends Model
         $langMap = [
             'uz' => 'uz',
             'uz-UZ' => 'uz',
+            'oz' => 'uz',
+            'oz-UZ' => 'uz',
             'ru' => 'ru',
             'ru-RU' => 'ru',
             'en' => 'en',
             'en-US' => 'en',
         ];
 
-        $locale = request()->get('l', app()->getLocale());
+        // Get locale from X-Locale header, Accept-Language header, request param, or app locale
+        $locale = request()->header('X-Locale')
+            ?? request()->header('Accept-Language')
+            ?? request()->get('l')
+            ?? app()->getLocale();
+        
+        // Extract primary language code (uz-UZ -> uz)
+        $locale = explode('-', $locale)[0];
+        
         $lang = $langMap[$locale] ?? 'uz';
 
         // Get translation from _translations jsonb field
