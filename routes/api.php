@@ -645,4 +645,21 @@ Route::prefix('v1')->group(function () {
             ]);
         });
     });
+
+    /*
+    |--------------------------------------------------------------------------
+    | V1 Tutor Endpoints (Yii2 format)
+    |--------------------------------------------------------------------------
+    | External tutor mobile apps still call /v1/tutor/group/* URLs.
+    | These aliases point at the canonical Teacher\GroupController.
+    */
+    Route::middleware(['auth:employee-api', 'throttle:api'])->prefix('tutor')->group(function () {
+        Route::get('/group/list', [\App\Http\Controllers\Api\V1\Teacher\GroupController::class, 'index']);
+        Route::get('/group/view', function (\Illuminate\Http\Request $request) {
+            return app(\App\Http\Controllers\Api\V1\Teacher\GroupController::class)->show($request, (int) $request->query('id'));
+        });
+        Route::get('/group/students', function (\Illuminate\Http\Request $request) {
+            return app(\App\Http\Controllers\Api\V1\Teacher\GroupController::class)->students($request, (int) $request->query('id'));
+        });
+    });
 });
