@@ -199,6 +199,7 @@ Route::prefix('teacher')->middleware('auth:employee-api')->group(function () {
 
     // Schedule & Workload
     Route::get('/schedule', [TeacherScheduleController::class, 'index']);
+    Route::get('/schedule/filter-options', [TeacherScheduleController::class, 'filterOptions']);
     Route::get('/schedule/day/{day}', [TeacherScheduleController::class, 'day']);
     Route::get('/workload', [TeacherScheduleController::class, 'workload']);
     Route::get('/groups', [TeacherScheduleController::class, 'groups']);

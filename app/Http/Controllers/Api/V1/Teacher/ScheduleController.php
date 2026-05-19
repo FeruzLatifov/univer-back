@@ -418,6 +418,34 @@ class ScheduleController extends Controller
      * @param Request $request
      * @return JsonResponse
      */
+    /**
+     * Filter options for the schedule UI.
+     * GET /api/v1/teacher/schedule/filter-options
+     *
+     * Query params: faculty_id, group_id, education_year, semester, expand
+     */
+    public function filterOptions(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'faculty_id'     => 'nullable|integer',
+            'group_id'       => 'nullable|integer',
+            'education_year' => 'nullable|string|max:64',
+            'semester'       => 'nullable|string|max:64',
+            'expand'         => 'nullable|string|max:128',
+        ]);
+
+        $teacher = $request->user();
+        $teacherId = $teacher->employee->id ?? null;
+
+        if (!$teacherId) {
+            return $this->errorResponse('Teacher profile not found', 404);
+        }
+
+        return $this->successResponse(
+            $this->scheduleService->getFilterOptions($teacherId, $validated)
+        );
+    }
+
     public function today(Request $request): JsonResponse
     {
         $teacher = $request->user();
