@@ -27,6 +27,7 @@ use App\Http\Controllers\Api\V1\Teacher\ContractController as TeacherContractCon
 use App\Http\Controllers\Api\V1\Teacher\StudentController as TeacherStudentController;
 use App\Http\Controllers\Api\V1\Teacher\CalendarPlanController as TeacherCalendarPlanController;
 use App\Http\Controllers\Api\V1\Teacher\RatingJournalController as TeacherRatingJournalController;
+use App\Http\Controllers\Api\V1\Teacher\GradeReportController as TeacherGradeReportController;
 use App\Http\Controllers\Api\V1\LanguageController;
 use App\Http\Controllers\Api\Admin\TranslationController;
 use App\Http\Controllers\Api\V1\Employee\DocumentController as EmployeeDocumentController;
@@ -313,6 +314,12 @@ Route::prefix('teacher')->middleware('auth:employee-api')->group(function () {
 
     // Rating journal (reyting qaydnomasi) — Yii2 tutor/grade/rating parity
     Route::get('/rating-journal', [TeacherRatingJournalController::class, 'index']);
+
+    // Tutor-scoped grade reports (Yii2 tutor/grade/{gpa,debtors,summary,student} parity)
+    Route::get('/grade/gpa', [TeacherGradeReportController::class, 'gpa']);
+    Route::get('/grade/debtors', [TeacherGradeReportController::class, 'debtors']);
+    Route::get('/grade/summary', [TeacherGradeReportController::class, 'summary']);
+    Route::get('/students/{id}/grades', [TeacherGradeReportController::class, 'student'])->whereNumber('id');
 });
 
 // ==========================================

@@ -693,5 +693,14 @@ Route::prefix('v1')->group(function () {
 
         // Yii2 grade/rating (reyting qaydnomasi)
         Route::get('/grade/rating', [\App\Http\Controllers\Api\V1\Teacher\RatingJournalController::class, 'index']);
+
+        // Yii2 grade reports
+        Route::get('/grade/gpa', [\App\Http\Controllers\Api\V1\Teacher\GradeReportController::class, 'gpa']);
+        Route::get('/grade/debtors', [\App\Http\Controllers\Api\V1\Teacher\GradeReportController::class, 'debtors']);
+        Route::get('/grade/summary', [\App\Http\Controllers\Api\V1\Teacher\GradeReportController::class, 'summary']);
+        Route::get('/grade/student', function (\Illuminate\Http\Request $request) {
+            return app(\App\Http\Controllers\Api\V1\Teacher\GradeReportController::class)
+                ->student($request, (int) $request->query('id'));
+        });
     });
 });
