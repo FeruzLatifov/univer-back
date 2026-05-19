@@ -703,6 +703,14 @@ Route::prefix('v1')->group(function () {
                 ->student($request, (int) $request->query('id'));
         });
 
+        // Yii2 social activity (read-only)
+        Route::get('/social-activity/directions', [\App\Http\Controllers\Api\V1\Teacher\SocialActivityController::class, 'directions']);
+        Route::get('/social-activity/applications', [\App\Http\Controllers\Api\V1\Teacher\SocialActivityController::class, 'applications']);
+        Route::get('/social-activity/application', function (\Illuminate\Http\Request $request) {
+            return app(\App\Http\Controllers\Api\V1\Teacher\SocialActivityController::class)
+                ->application($request, (int) $request->query('id'));
+        });
+
         // Yii2 reference endpoints
         Route::prefix('reference')->group(function () {
             Route::get('/countries', [\App\Http\Controllers\Api\V1\ReferenceController::class, 'countries']);

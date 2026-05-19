@@ -29,6 +29,7 @@ use App\Http\Controllers\Api\V1\Teacher\CalendarPlanController as TeacherCalenda
 use App\Http\Controllers\Api\V1\Teacher\RatingJournalController as TeacherRatingJournalController;
 use App\Http\Controllers\Api\V1\Teacher\GradeReportController as TeacherGradeReportController;
 use App\Http\Controllers\Api\V1\Teacher\QrAttendanceController as TeacherQrAttendanceController;
+use App\Http\Controllers\Api\V1\Teacher\SocialActivityController as TeacherSocialActivityController;
 use App\Http\Controllers\Api\V1\Student\QrAttendanceController as StudentQrAttendanceController;
 use App\Http\Controllers\Api\V1\LanguageController;
 use App\Http\Controllers\Api\V1\ReferenceController;
@@ -329,6 +330,11 @@ Route::prefix('teacher')->middleware('auth:employee-api')->group(function () {
     Route::post('/qr-attendance/start', [TeacherQrAttendanceController::class, 'start']);
     Route::get('/qr-attendance/poll/{token}', [TeacherQrAttendanceController::class, 'poll'])->where('token', '[A-Fa-f0-9]{32}');
     Route::post('/qr-attendance/save', [TeacherQrAttendanceController::class, 'save']);
+
+    // Social activity (SAD) — read-only foundation; write flow lands later
+    Route::get('/social-activity/directions', [TeacherSocialActivityController::class, 'directions']);
+    Route::get('/social-activity/applications', [TeacherSocialActivityController::class, 'applications']);
+    Route::get('/social-activity/applications/{id}', [TeacherSocialActivityController::class, 'application'])->whereNumber('id');
 });
 
 // Student-side QR attendance check-in
