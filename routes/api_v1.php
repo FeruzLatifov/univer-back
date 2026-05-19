@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\V1\Teacher\TopicController as TeacherTopicControlle
 use App\Http\Controllers\Api\V1\Teacher\ExamController as TeacherExamController;
 use App\Http\Controllers\Api\V1\Teacher\AssignmentController as TeacherAssignmentController;
 use App\Http\Controllers\Api\V1\Teacher\TestController as TeacherTestController;
+use App\Http\Controllers\Api\V1\Teacher\ReportsController as TeacherReportsController;
 use App\Http\Controllers\Api\V1\LanguageController;
 use App\Http\Controllers\Api\Admin\TranslationController;
 use App\Http\Controllers\Api\V1\Employee\DocumentController as EmployeeDocumentController;
@@ -274,6 +275,9 @@ Route::prefix('teacher')->middleware('auth:employee-api')->group(function () {
     Route::get('/test/{testId}/results', [TeacherTestController::class, 'getResults']);
     Route::get('/test/{testId}/attempt/{attemptId}', [TeacherTestController::class, 'getAttempt']);
     Route::post('/test/{testId}/attempt/{attemptId}/grade', [TeacherTestController::class, 'gradeAttempt']);
+
+    // Reports
+    Route::get('/reports/overview', [TeacherReportsController::class, 'overview']);
 });
 
 // ==========================================
