@@ -25,6 +25,7 @@ use App\Http\Controllers\Api\V1\Teacher\GroupController as TeacherGroupControlle
 use App\Http\Controllers\Api\V1\Teacher\TutorVisitController as TeacherTutorVisitController;
 use App\Http\Controllers\Api\V1\Teacher\ContractController as TeacherContractController;
 use App\Http\Controllers\Api\V1\Teacher\StudentController as TeacherStudentController;
+use App\Http\Controllers\Api\V1\Teacher\CalendarPlanController as TeacherCalendarPlanController;
 use App\Http\Controllers\Api\V1\LanguageController;
 use App\Http\Controllers\Api\Admin\TranslationController;
 use App\Http\Controllers\Api\V1\Employee\DocumentController as EmployeeDocumentController;
@@ -304,6 +305,10 @@ Route::prefix('teacher')->middleware('auth:employee-api')->group(function () {
     Route::get('/students/{id}', [TeacherStudentController::class, 'show'])->whereNumber('id');
     Route::put('/students/{id}', [TeacherStudentController::class, 'update'])->whereNumber('id');
     Route::get('/students/{id}/history', [TeacherStudentController::class, 'history'])->whereNumber('id');
+
+    // Calendar plan (taqvimiy reja) — Laravel-only, no Yii2 parity
+    Route::get('/calendar-plan/subject/{id}', [TeacherCalendarPlanController::class, 'show'])->whereNumber('id');
+    Route::put('/calendar-plan/subject/{id}', [TeacherCalendarPlanController::class, 'update'])->whereNumber('id');
 });
 
 // ==========================================
