@@ -661,5 +661,14 @@ Route::prefix('v1')->group(function () {
         Route::get('/group/students', function (\Illuminate\Http\Request $request) {
             return app(\App\Http\Controllers\Api\V1\Teacher\GroupController::class)->students($request, (int) $request->query('id'));
         });
+
+        // Yii2 used POST /student/visit-create?id=<student>
+        Route::get('/student/visit-list', [\App\Http\Controllers\Api\V1\Teacher\TutorVisitController::class, 'index']);
+        Route::post('/student/visit-create', function (\Illuminate\Http\Request $request) {
+            $studentId = (int) $request->query('id');
+            $request->merge(['_student' => $studentId]);
+
+            return app(\App\Http\Controllers\Api\V1\Teacher\TutorVisitController::class)->store($request);
+        });
     });
 });

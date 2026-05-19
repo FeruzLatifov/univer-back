@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\V1\Teacher\AssignmentController as TeacherAssignmen
 use App\Http\Controllers\Api\V1\Teacher\TestController as TeacherTestController;
 use App\Http\Controllers\Api\V1\Teacher\ReportsController as TeacherReportsController;
 use App\Http\Controllers\Api\V1\Teacher\GroupController as TeacherGroupController;
+use App\Http\Controllers\Api\V1\Teacher\TutorVisitController as TeacherTutorVisitController;
 use App\Http\Controllers\Api\V1\LanguageController;
 use App\Http\Controllers\Api\Admin\TranslationController;
 use App\Http\Controllers\Api\V1\Employee\DocumentController as EmployeeDocumentController;
@@ -284,6 +285,12 @@ Route::prefix('teacher')->middleware('auth:employee-api')->group(function () {
     Route::get('/group/list', [TeacherGroupController::class, 'index']);
     Route::get('/group/{id}', [TeacherGroupController::class, 'show'])->whereNumber('id');
     Route::get('/group/{id}/students', [TeacherGroupController::class, 'students'])->whereNumber('id');
+
+    // Tutor visits (kurator student visits log)
+    Route::get('/visits', [TeacherTutorVisitController::class, 'index']);
+    Route::post('/visits', [TeacherTutorVisitController::class, 'store']);
+    Route::get('/visits/student/{studentId}', [TeacherTutorVisitController::class, 'forStudent'])
+        ->whereNumber('studentId');
 });
 
 // ==========================================
