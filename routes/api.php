@@ -670,5 +670,12 @@ Route::prefix('v1')->group(function () {
 
             return app(\App\Http\Controllers\Api\V1\Teacher\TutorVisitController::class)->store($request);
         });
+
+        // Yii2 contract endpoints
+        Route::get('/contract/list', [\App\Http\Controllers\Api\V1\Teacher\ContractController::class, 'index']);
+        Route::get('/contract/view', function (\Illuminate\Http\Request $request) {
+            return app(\App\Http\Controllers\Api\V1\Teacher\ContractController::class)->show($request, (int) $request->query('id'));
+        });
+        Route::get('/contract/debtors', [\App\Http\Controllers\Api\V1\Teacher\ContractController::class, 'debtors']);
     });
 });

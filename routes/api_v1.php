@@ -23,6 +23,7 @@ use App\Http\Controllers\Api\V1\Teacher\TestController as TeacherTestController;
 use App\Http\Controllers\Api\V1\Teacher\ReportsController as TeacherReportsController;
 use App\Http\Controllers\Api\V1\Teacher\GroupController as TeacherGroupController;
 use App\Http\Controllers\Api\V1\Teacher\TutorVisitController as TeacherTutorVisitController;
+use App\Http\Controllers\Api\V1\Teacher\ContractController as TeacherContractController;
 use App\Http\Controllers\Api\V1\LanguageController;
 use App\Http\Controllers\Api\Admin\TranslationController;
 use App\Http\Controllers\Api\V1\Employee\DocumentController as EmployeeDocumentController;
@@ -291,6 +292,11 @@ Route::prefix('teacher')->middleware('auth:employee-api')->group(function () {
     Route::post('/visits', [TeacherTutorVisitController::class, 'store']);
     Route::get('/visits/student/{studentId}', [TeacherTutorVisitController::class, 'forStudent'])
         ->whereNumber('studentId');
+
+    // Contracts (student contract & payment summary)
+    Route::get('/contracts', [TeacherContractController::class, 'index']);
+    Route::get('/contracts/debtors', [TeacherContractController::class, 'debtors']);
+    Route::get('/contracts/{id}', [TeacherContractController::class, 'show'])->whereNumber('id');
 });
 
 // ==========================================
