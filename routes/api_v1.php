@@ -26,6 +26,7 @@ use App\Http\Controllers\Api\V1\Teacher\TutorVisitController as TeacherTutorVisi
 use App\Http\Controllers\Api\V1\Teacher\ContractController as TeacherContractController;
 use App\Http\Controllers\Api\V1\Teacher\StudentController as TeacherStudentController;
 use App\Http\Controllers\Api\V1\Teacher\CalendarPlanController as TeacherCalendarPlanController;
+use App\Http\Controllers\Api\V1\Teacher\RatingJournalController as TeacherRatingJournalController;
 use App\Http\Controllers\Api\V1\LanguageController;
 use App\Http\Controllers\Api\Admin\TranslationController;
 use App\Http\Controllers\Api\V1\Employee\DocumentController as EmployeeDocumentController;
@@ -309,6 +310,9 @@ Route::prefix('teacher')->middleware('auth:employee-api')->group(function () {
     // Calendar plan (taqvimiy reja) — Laravel-only, no Yii2 parity
     Route::get('/calendar-plan/subject/{id}', [TeacherCalendarPlanController::class, 'show'])->whereNumber('id');
     Route::put('/calendar-plan/subject/{id}', [TeacherCalendarPlanController::class, 'update'])->whereNumber('id');
+
+    // Rating journal (reyting qaydnomasi) — Yii2 tutor/grade/rating parity
+    Route::get('/rating-journal', [TeacherRatingJournalController::class, 'index']);
 });
 
 // ==========================================

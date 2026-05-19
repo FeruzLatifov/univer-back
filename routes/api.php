@@ -690,5 +690,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/student/history', function (\Illuminate\Http\Request $request) {
             return app(\App\Http\Controllers\Api\V1\Teacher\StudentController::class)->history($request, (int) $request->query('id'));
         });
+
+        // Yii2 grade/rating (reyting qaydnomasi)
+        Route::get('/grade/rating', [\App\Http\Controllers\Api\V1\Teacher\RatingJournalController::class, 'index']);
     });
 });
