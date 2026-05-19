@@ -229,6 +229,19 @@ class ExamController extends Controller
     }
 
     /**
+     * Get spreadsheet-style roster of all students with their current
+     * exam result (null if not entered yet). Drives the inline grading UI.
+     */
+    public function roster(Request $request, int $id): JsonResponse
+    {
+        $teacher = $request->user();
+
+        $data = $this->examService->getRoster($id, $teacher->employee->id);
+
+        return $this->successResponse($data);
+    }
+
+    /**
      * Enter exam results
      *
      * @OA\Post(

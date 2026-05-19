@@ -231,6 +231,7 @@ Route::prefix('teacher')->middleware('auth:employee-api')->group(function () {
     Route::get('/exam/{id}', [TeacherExamController::class, 'show']);
     Route::post('/exam/{id}/results', [TeacherExamController::class, 'enterResults']);
     Route::get('/exam/{id}/statistics', [TeacherExamController::class, 'statistics']);
+    Route::get('/exam/{id}/roster', [TeacherExamController::class, 'roster']);
 
     // Assignment/Task Management
     Route::get('/assignments', [TeacherAssignmentController::class, 'index']);

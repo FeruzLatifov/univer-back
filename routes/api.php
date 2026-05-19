@@ -244,6 +244,8 @@ Route::middleware(['auth:employee-api', 'throttle:api'])->prefix('v1/teacher')->
         Route::get('/', [\App\Http\Controllers\Api\V1\Teacher\ExamController::class, 'index']);
         Route::get('/{id}', [\App\Http\Controllers\Api\V1\Teacher\ExamController::class, 'show']);
         Route::get('/{id}/students', [\App\Http\Controllers\Api\V1\Teacher\ExamController::class, 'students']);
+        Route::get('/{id}/roster', [\App\Http\Controllers\Api\V1\Teacher\ExamController::class, 'roster']);
+        Route::post('/{id}/results', [\App\Http\Controllers\Api\V1\Teacher\ExamController::class, 'enterResults']);
     });
 
     // Resources & Materials

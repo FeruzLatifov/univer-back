@@ -3,7 +3,7 @@
 namespace App\Services\Teacher;
 
 use App\Models\EExam;
-use App\Models\EExamResult;
+use App\Models\EExamStudent;
 use App\Models\EStudent;
 use Illuminate\Support\Facades\DB;
 
@@ -49,7 +49,7 @@ class ExamService
         $exams = $query->orderBy('exam_date', 'desc')->get();
 
         return $exams->map(function ($exam) {
-            $resultsCount = EExamResult::where('_exam', $exam->id)->count();
+            $resultsCount = EExamStudent::where('_exam', $exam->id)->count();
             $totalStudents = EStudent::whereHas('meta', function ($q) use ($exam) {
                 $q->where('_group', $exam->_group);
             })->count();
@@ -110,7 +110,7 @@ class ExamService
             ->with(['subject', 'group'])
             ->firstOrFail();
 
-        $results = EExamResult::where('_exam', $id)
+        $results = EExamStudent::where('_exam', $id)
             ->with('student')
             ->get();
 
@@ -155,6 +155,70 @@ class ExamService
     }
 
     /**
+     * Get spreadsheet-style roster: every student in the group with their
+     * existing exam result (or null placeholder if not entered yet).
+     */
+    public function getRoster(int $examId, int $teacherId): array
+    {
+        $exam = EExam::where('id', $examId)
+            ->where('_employee', $teacherId)
+            ->with(['subject', 'group'])
+            ->firstOrFail();
+
+        $students = EStudent::query()
+            ->select('e_student.*')
+            ->join('e_student_meta', 'e_student.id', '=', 'e_student_meta._student')
+            ->where('e_student_meta._group', $exam->_group)
+            ->where('e_student_meta.active', true)
+            ->where('e_student.active', true)
+            ->orderBy('e_student.second_name')
+            ->orderBy('e_student.first_name')
+            ->get();
+
+        $existing = EExamStudent::where('_exam', $examId)
+            ->get()
+            ->keyBy('_student');
+
+        $roster = $students->map(function (EStudent $s) use ($existing, $exam) {
+            $entry = $existing->get($s->id);
+
+            return [
+                'student_id'        => $s->id,
+                'student_id_number' => $s->student_id_number,
+                'full_name'         => trim($s->second_name . ' ' . $s->first_name . ' ' . $s->third_name),
+                'first_name'        => $s->first_name,
+                'second_name'       => $s->second_name,
+                'result' => $entry ? [
+                    'id'           => $entry->id,
+                    'score'        => (float) $entry->score,
+                    'max_score'    => (int) ($entry->max_score ?: $exam->max_score),
+                    'grade'        => $entry->grade,
+                    'letter_grade' => $entry->letter_grade,
+                    'attended'     => (bool) $entry->attended,
+                    'comment'      => $entry->comment,
+                    'graded_at'    => $entry->graded_at?->format('Y-m-d H:i'),
+                ] : null,
+            ];
+        })->all();
+
+        return [
+            'exam' => [
+                'id'            => $exam->id,
+                'title'         => $exam->title,
+                'exam_type'     => $exam->exam_type,
+                'exam_date'     => $exam->exam_date,
+                'max_score'     => $exam->max_score,
+                'passing_score' => $exam->passing_score,
+                'subject'       => $exam->subject ? ['id' => $exam->subject->id, 'name' => $exam->subject->name] : null,
+                'group'         => $exam->group ? ['id' => $exam->group->id, 'name' => $exam->group->name] : null,
+            ],
+            'roster'         => $roster,
+            'total_students' => count($roster),
+            'entered'        => $existing->count(),
+        ];
+    }
+
+    /**
      * Enter exam results
      */
     public function enterResults(int $examId, int $teacherId, array $results): array
@@ -170,24 +234,25 @@ class ExamService
 
             foreach ($results as $result) {
                 try {
-                    $existingResult = EExamResult::where('_exam', $examId)
+                    $existingResult = EExamStudent::where('_exam', $examId)
                         ->where('_student', $result['student_id'])
                         ->first();
 
                     $data = [
-                        '_exam' => $examId,
+                        '_exam'    => $examId,
                         '_student' => $result['student_id'],
-                        'score' => $result['score'],
-                        'grade' => $result['grade'] ?? $this->calculateGrade($result['score'], $examId),
+                        'score'    => $result['score'] ?? 0,
+                        'grade'    => $result['grade'] ?? $this->calculateGrade($result['score'] ?? 0, $examId),
                         'attended' => $result['attended'] ?? true,
-                        'notes' => $result['notes'] ?? null,
+                        'comment'  => $result['notes'] ?? $result['comment'] ?? null,
+                        'active'   => true,
                     ];
 
                     if ($existingResult) {
                         $existingResult->update($data);
                         $updated++;
                     } else {
-                        EExamResult::create($data);
+                        EExamStudent::create($data);
                         $created++;
                     }
                 } catch (\Exception $e) {
@@ -212,7 +277,7 @@ class ExamService
             ->where('_employee', $teacherId)
             ->firstOrFail();
 
-        $results = EExamResult::where('_exam', $examId)->get();
+        $results = EExamStudent::where('_exam', $examId)->get();
 
         $totalStudents = EStudent::whereHas('meta', function ($q) use ($exam) {
             $q->where('_group', $exam->_group);
