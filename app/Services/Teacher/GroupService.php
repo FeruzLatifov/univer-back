@@ -171,7 +171,7 @@ class GroupService
                 'image'             => $student->image,
                 'gender'            => $student->_gender,
                 'birth_date'        => $student->birth_date?->format('Y-m-d'),
-                'phone'             => $student->phone_number,
+                'phone'             => $student->phone,
                 'email'             => $student->email,
                 'student_status'    => $meta->student_status,
                 'payment_form'      => $meta->paymentForm ? [

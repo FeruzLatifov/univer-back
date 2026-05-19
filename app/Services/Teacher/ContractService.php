@@ -155,7 +155,7 @@ class ContractService
                 'id'                => $c->student->id,
                 'full_name'         => trim($c->student->first_name . ' ' . $c->student->second_name . ' ' . $c->student->third_name),
                 'student_id_number' => $c->student->student_id_number,
-                'phone'             => $c->student->phone_number,
+                'phone'             => $c->student->phone,
                 'email'             => $c->student->email,
             ] : null,
             'payments'      => $c->payments->map(fn($p) => [

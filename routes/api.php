@@ -677,5 +677,16 @@ Route::prefix('v1')->group(function () {
             return app(\App\Http\Controllers\Api\V1\Teacher\ContractController::class)->show($request, (int) $request->query('id'));
         });
         Route::get('/contract/debtors', [\App\Http\Controllers\Api\V1\Teacher\ContractController::class, 'debtors']);
+
+        // Yii2 student profile endpoints
+        Route::get('/student/view', function (\Illuminate\Http\Request $request) {
+            return app(\App\Http\Controllers\Api\V1\Teacher\StudentController::class)->show($request, (int) $request->query('id'));
+        });
+        Route::post('/student/update', function (\Illuminate\Http\Request $request) {
+            return app(\App\Http\Controllers\Api\V1\Teacher\StudentController::class)->update($request, (int) $request->query('id'));
+        });
+        Route::get('/student/history', function (\Illuminate\Http\Request $request) {
+            return app(\App\Http\Controllers\Api\V1\Teacher\StudentController::class)->history($request, (int) $request->query('id'));
+        });
     });
 });

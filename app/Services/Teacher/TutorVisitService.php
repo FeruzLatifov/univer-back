@@ -38,7 +38,7 @@ class TutorVisitService
         $query = ETutorVisit::query()
             ->whereIn('_student', $studentIds)
             ->where('active', true)
-            ->with('student:id,first_name,second_name,third_name,student_id_number,phone_number')
+            ->with('student:id,first_name,second_name,third_name,student_id_number,phone')
             ->orderByDesc('created_at');
 
         if (!empty($filters['student_id'])) {

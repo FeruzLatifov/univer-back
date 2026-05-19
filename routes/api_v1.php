@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\V1\Teacher\ReportsController as TeacherReportsContr
 use App\Http\Controllers\Api\V1\Teacher\GroupController as TeacherGroupController;
 use App\Http\Controllers\Api\V1\Teacher\TutorVisitController as TeacherTutorVisitController;
 use App\Http\Controllers\Api\V1\Teacher\ContractController as TeacherContractController;
+use App\Http\Controllers\Api\V1\Teacher\StudentController as TeacherStudentController;
 use App\Http\Controllers\Api\V1\LanguageController;
 use App\Http\Controllers\Api\Admin\TranslationController;
 use App\Http\Controllers\Api\V1\Employee\DocumentController as EmployeeDocumentController;
@@ -297,6 +298,11 @@ Route::prefix('teacher')->middleware('auth:employee-api')->group(function () {
     Route::get('/contracts', [TeacherContractController::class, 'index']);
     Route::get('/contracts/debtors', [TeacherContractController::class, 'debtors']);
     Route::get('/contracts/{id}', [TeacherContractController::class, 'show'])->whereNumber('id');
+
+    // Student profile (tutor scope)
+    Route::get('/students/{id}', [TeacherStudentController::class, 'show'])->whereNumber('id');
+    Route::put('/students/{id}', [TeacherStudentController::class, 'update'])->whereNumber('id');
+    Route::get('/students/{id}/history', [TeacherStudentController::class, 'history'])->whereNumber('id');
 });
 
 // ==========================================
