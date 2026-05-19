@@ -28,6 +28,8 @@ use App\Http\Controllers\Api\V1\Teacher\StudentController as TeacherStudentContr
 use App\Http\Controllers\Api\V1\Teacher\CalendarPlanController as TeacherCalendarPlanController;
 use App\Http\Controllers\Api\V1\Teacher\RatingJournalController as TeacherRatingJournalController;
 use App\Http\Controllers\Api\V1\Teacher\GradeReportController as TeacherGradeReportController;
+use App\Http\Controllers\Api\V1\Teacher\QrAttendanceController as TeacherQrAttendanceController;
+use App\Http\Controllers\Api\V1\Student\QrAttendanceController as StudentQrAttendanceController;
 use App\Http\Controllers\Api\V1\LanguageController;
 use App\Http\Controllers\Api\Admin\TranslationController;
 use App\Http\Controllers\Api\V1\Employee\DocumentController as EmployeeDocumentController;
@@ -320,6 +322,16 @@ Route::prefix('teacher')->middleware('auth:employee-api')->group(function () {
     Route::get('/grade/debtors', [TeacherGradeReportController::class, 'debtors']);
     Route::get('/grade/summary', [TeacherGradeReportController::class, 'summary']);
     Route::get('/students/{id}/grades', [TeacherGradeReportController::class, 'student'])->whereNumber('id');
+
+    // QR attendance (rotating-code anti-screenshot session)
+    Route::post('/qr-attendance/start', [TeacherQrAttendanceController::class, 'start']);
+    Route::get('/qr-attendance/poll/{token}', [TeacherQrAttendanceController::class, 'poll'])->where('token', '[A-Fa-f0-9]{32}');
+    Route::post('/qr-attendance/save', [TeacherQrAttendanceController::class, 'save']);
+});
+
+// Student-side QR attendance check-in
+Route::middleware('auth:student-api')->prefix('student')->group(function () {
+    Route::post('/qr-attendance/check', [StudentQrAttendanceController::class, 'check']);
 });
 
 // ==========================================
