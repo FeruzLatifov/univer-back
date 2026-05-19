@@ -31,6 +31,7 @@ use App\Http\Controllers\Api\V1\Teacher\GradeReportController as TeacherGradeRep
 use App\Http\Controllers\Api\V1\Teacher\QrAttendanceController as TeacherQrAttendanceController;
 use App\Http\Controllers\Api\V1\Student\QrAttendanceController as StudentQrAttendanceController;
 use App\Http\Controllers\Api\V1\LanguageController;
+use App\Http\Controllers\Api\V1\ReferenceController;
 use App\Http\Controllers\Api\Admin\TranslationController;
 use App\Http\Controllers\Api\V1\Employee\DocumentController as EmployeeDocumentController;
 use App\Http\Controllers\Api\V1\SystemController;
@@ -332,6 +333,24 @@ Route::prefix('teacher')->middleware('auth:employee-api')->group(function () {
 // Student-side QR attendance check-in
 Route::middleware('auth:student-api')->prefix('student')->group(function () {
     Route::post('/qr-attendance/check', [StudentQrAttendanceController::class, 'check']);
+});
+
+// ==========================================
+// REFERENCE DATA (cascading lookups)
+// ==========================================
+Route::middleware(['auth:employee-api,student-api', 'throttle:api'])->prefix('reference')->group(function () {
+    Route::get('/countries', [ReferenceController::class, 'countries']);
+    Route::get('/provinces', [ReferenceController::class, 'provinces']);
+    Route::get('/districts', [ReferenceController::class, 'districts']);
+    Route::get('/terrains', [ReferenceController::class, 'terrains']);
+    Route::get('/student-living-statuses', [ReferenceController::class, 'studentLivingStatuses']);
+    Route::get('/accommodations', [ReferenceController::class, 'accommodations']);
+    Route::get('/student-roommate-types', [ReferenceController::class, 'studentRoommateTypes']);
+    Route::get('/student-statuses', [ReferenceController::class, 'studentStatuses']);
+    Route::get('/education-years', [ReferenceController::class, 'educationYears']);
+    Route::get('/specialties', [ReferenceController::class, 'specialties']);
+    Route::get('/subjects', [ReferenceController::class, 'subjects']);
+    Route::get('/semesters', [ReferenceController::class, 'semesters']);
 });
 
 // ==========================================

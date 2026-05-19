@@ -702,5 +702,21 @@ Route::prefix('v1')->group(function () {
             return app(\App\Http\Controllers\Api\V1\Teacher\GradeReportController::class)
                 ->student($request, (int) $request->query('id'));
         });
+
+        // Yii2 reference endpoints
+        Route::prefix('reference')->group(function () {
+            Route::get('/countries', [\App\Http\Controllers\Api\V1\ReferenceController::class, 'countries']);
+            Route::get('/provinces', [\App\Http\Controllers\Api\V1\ReferenceController::class, 'provinces']);
+            Route::get('/districts', [\App\Http\Controllers\Api\V1\ReferenceController::class, 'districts']);
+            Route::get('/terrains', [\App\Http\Controllers\Api\V1\ReferenceController::class, 'terrains']);
+            Route::get('/student-living-statuses', [\App\Http\Controllers\Api\V1\ReferenceController::class, 'studentLivingStatuses']);
+            Route::get('/accommodations', [\App\Http\Controllers\Api\V1\ReferenceController::class, 'accommodations']);
+            Route::get('/student-roommate-types', [\App\Http\Controllers\Api\V1\ReferenceController::class, 'studentRoommateTypes']);
+            Route::get('/student-statuses', [\App\Http\Controllers\Api\V1\ReferenceController::class, 'studentStatuses']);
+            Route::get('/education-years', [\App\Http\Controllers\Api\V1\ReferenceController::class, 'educationYears']);
+            Route::get('/specialties', [\App\Http\Controllers\Api\V1\ReferenceController::class, 'specialties']);
+            Route::get('/subjects', [\App\Http\Controllers\Api\V1\ReferenceController::class, 'subjects']);
+            Route::get('/semesters', [\App\Http\Controllers\Api\V1\ReferenceController::class, 'semesters']);
+        });
     });
 });
